@@ -6,3 +6,6 @@ dependencies:
   - python=3.13.2
   - fastapi=0.115.12=pyh29332c3_0
   - fastapi-cli=0.0.7=pyhd8ed1ab_0
+  - pydantic=2.10.1=pyh10f6f8f_0
+  - pip:
+      - pytubefix==8.12.3
