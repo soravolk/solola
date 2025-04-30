@@ -18,7 +18,10 @@ def submitAudio(audio: Audio):
     try: 
         if audio.source_type == "youtube":
             yt = YouTube(audio.url)
-            return { "title": yt.title}
+            return { 
+                "title": yt.title,
+                "video_id": yt.video_id
+            }
         else:
             raise HTTPException(
                 status_code=400,
