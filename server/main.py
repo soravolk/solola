@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class Audio(BaseModel):
     source_type: str
-    url: str
+    source: str
     
 app = FastAPI()
 version = "/api/v1/"
@@ -17,10 +17,10 @@ def read_root():
 def submitAudio(audio: Audio):
     try: 
         if audio.source_type == "youtube":
-            yt = YouTube(audio.url)
+            yt = YouTube(audio.source)
             return { 
-                "title": yt.title,
-                "video_id": yt.video_id
+                "id": yt.video_id,
+                "name": yt.title
             }
         else:
             raise HTTPException(
