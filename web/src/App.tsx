@@ -1,5 +1,6 @@
 import reactLogo from "./assets/react.svg";
 import "./App.css";
+import { FileUpload } from "./components/fileUpload";
 
 // Header component: displays the logos and the main title
 const Header: React.FC = () => {
@@ -82,29 +83,8 @@ const Content = () => {
           />
         </section>
         <span style={{ padding: "0.5em" }}>or</span>
-        {/* Part 2: Drop zone for the audio file */}
-        <section style={{ width: "60%" }}>
-          <div
-            style={{
-              display: "flex",
-              border: "2px dashed #008CBA",
-              borderRadius: "8px",
-              padding: "1em",
-              backgroundColor: "rgba(0, 140, 186, 0.1)",
-              cursor: "pointer",
-              height: "40vh",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <p style={{ margin: "0.5em 0" }}>
-                Drag & drop your audio file here
-              </p>
-              <p style={{ margin: "0.5em 0" }}>or click to select file</p>
-            </div>
-          </div>
-        </section>
+        {/* Part 3: Drop zone for the audio file */}
+        <FileUpload />
       </div>
     </main>
   );
