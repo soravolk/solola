@@ -1,6 +1,7 @@
 import os
 import uuid
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pytubefix import YouTube
 from pydantic import BaseModel
 
@@ -15,6 +16,14 @@ class Audio(BaseModel):
     
 app = FastAPI()
 version = "/api/v1/"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def generate_presigned_url(file_name: str, file_type: str) -> str:
     presigned_url = "presigned_url_placeholder"
