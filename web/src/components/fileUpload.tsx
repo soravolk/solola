@@ -3,6 +3,7 @@ import { useState } from "react";
 export const FileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
   const updateFileUploadStatus = (file: File | null) => {
     if (file) {
@@ -19,6 +20,32 @@ export const FileUpload = () => {
     setIsUploading(true);
   };
 
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      // Check if it's an audio file
+      if (file.type.startsWith("audio/")) {
+        updateFileUploadStatus(file);
+      } else {
+        alert("Please select an audio file");
+      }
+    }
+  };
+
   return (
     <section style={{ width: "60%" }}>
       <div
@@ -28,17 +55,23 @@ export const FileUpload = () => {
             fileInput.click();
           }
         }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
           display: "flex",
-          border: "2px dashed #008CBA",
+          border: `2px dashed ${isDragOver ? "#ff6b6b" : "#008CBA"}`,
           borderRadius: "8px",
           padding: "1em",
-          backgroundColor: "rgba(0, 140, 186, 0.1)",
+          backgroundColor: isDragOver
+            ? "rgba(255, 107, 107, 0.1)"
+            : "rgba(0, 140, 186, 0.1)",
           cursor: "pointer",
           height: "40vh",
           alignItems: "center",
           justifyContent: "center",
           flexDirection: "column",
+          transition: "all 0.2s ease",
         }}
       >
         <input
@@ -49,7 +82,12 @@ export const FileUpload = () => {
           onChange={handleFileSelect}
         />
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <p style={{ margin: "0.5em 0" }}>Click to select file</p>
+          <p style={{ margin: "0.5em 0" }}>
+            {isDragOver
+              ? "Drop your audio file here"
+              : "Drag & drop your audio file here"}
+          </p>
+          <p style={{ margin: "0.5em 0" }}>or click to select file</p>
         </div>
         {selectedFile && (
           <div style={{ marginTop: "1em" }}>
