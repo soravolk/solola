@@ -1,10 +1,13 @@
+import boto3
 import os
 import uuid
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pytubefix import YouTube
 from pydantic import BaseModel
 
+load_dotenv()
 class FileData(BaseModel):
     filename: str
     content_type: str
@@ -26,8 +29,23 @@ app.add_middleware(
 )
 
 def generate_presigned_url(file_name: str, file_type: str) -> str:
-    presigned_url = "presigned_url_placeholder"
-    return presigned_url
+    session = boto3.Session(profile_name=os.getenv('AWS_PROFILE'))
+    s3_client = session.client('s3')
+    bucket_name = os.getenv('S3_BUCKET_NAME')
+
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": bucket_name,
+                "Key": file_name,
+                "ContentType": file_type,
+            },
+            ExpiresIn=60,  # 1 minute
+        )
+        return presigned_url
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate presigned URL: {e}")
 
 @app.get("/")
 def read_root():

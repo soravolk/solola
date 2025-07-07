@@ -16,6 +16,7 @@ dist-ssr
 
 # server
 __pycache__
+.env
 
 # Editor directories and files
 .vscode/*
