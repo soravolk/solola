@@ -11,7 +11,6 @@ load_dotenv()
 class FileData(BaseModel):
     filename: str
     content_type: str
-    data: str  # base64 encoded file data
 
 class Audio(BaseModel):
     source_type: str

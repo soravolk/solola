@@ -1,5 +1,10 @@
 import { useState } from "react";
 
+interface GetUploadURLResponse {
+  upload_url: string;
+  id: string;
+}
+
 export const FileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -16,8 +21,48 @@ export const FileUpload = () => {
     updateFileUploadStatus(file);
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
+    if (!selectedFile)
+      throw new Error("No file is found, please select a file");
+
     setIsUploading(true);
+
+    try {
+      // Step 1: Request presigned URL from backend
+      const requestData = {
+        source_type: "local",
+        source: {
+          filename: selectedFile.name,
+          content_type: selectedFile.type,
+        },
+      };
+
+      const response = await fetch("http://localhost:8000/api/v1/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestData),
+      });
+
+      if (!response.ok) throw new Error(`Failed to get presigned URL`);
+
+      const result = (await response.json()) as GetUploadURLResponse;
+      const { upload_url, id } = result;
+
+      // Step 2: Upload file directly to S3
+      const uploadRes = await fetch(upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": selectedFile.type },
+        body: selectedFile,
+      });
+
+      if (!uploadRes.ok) throw new Error("S3 upload failed");
+
+      alert(`File uploaded successfully! ID: ${id}`);
+    } catch {
+      alert("Upload failed. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -95,7 +140,7 @@ export const FileUpload = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleUpload();
+                void handleUpload();
               }}
               disabled={isUploading}
               style={{
