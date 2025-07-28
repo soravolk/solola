@@ -28,3 +28,9 @@ __pycache__
 *.njsproj
 *.sln
 *.sw?
+
+# lambda
+cqt
+prediction
+*.ckpt
+*.mp3
