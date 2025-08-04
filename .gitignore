@@ -32,5 +32,9 @@ __pycache__
 # lambda
 cqt
 prediction
+frame_level_full_tech_prediction
+frame_level_note_attrib
+frame_level_pred
+full_tech_prediction
 *.ckpt
 *.mp3
