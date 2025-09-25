@@ -170,6 +170,31 @@ def predict_notes(audio_file_path: str, model_path: str) -> dict:
     prediction_path = os.path.join(model.prediction_dir, "note_prediction.npy")
     np.save(prediction_path, np.array(concatenated, dtype=int))
 
+    # Save simple manifest for downstream usage
+    try:
+        import json
+        manifest = {
+            "audio_file": audio_file_path,
+            "tempo": float(tempo),
+            "segments": [
+                {
+                    "index": i,
+                    "cqt_file": segment_files[i],
+                    "prediction_file": os.path.join(
+                        model.prediction_dir, f"note_prediction_segment_{i:02d}.npy"
+                    ),
+                    "frames": lengths[i],
+                }
+                for i in range(len(segment_files))
+            ],
+            "concatenated_prediction": prediction_path,
+        }
+        with open(os.path.join(model.prediction_dir, "note_prediction_manifest.json"), "w") as f:
+            json.dump(manifest, f, indent=2)
+    except Exception as e:
+        # Non-fatal; continue even if manifest write fails
+        pass
+
     return {
         "segments": segment_tabs,
         "concatenated": concatenated,
