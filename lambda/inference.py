@@ -181,8 +181,8 @@ def generate_frame_level_attributes(
         if not os.path.exists(cqt_filename):
             print(f"Warning: CQT file not found: {cqt_filename}. Skipping segment {unit_n}.")
             continue
-        
-        note_attrib_path = os.path.join(prediction_dir, f"note_prediction_segment_{unit_n:02d}.npy")
+
+        note_attrib_path = os.path.join(prediction_dir, f"{track_name}_note_prediction_segment_{unit_n:02d}.npy")
         if not os.path.exists(note_attrib_path):
             print(f"Warning: Note prediction file not found: {note_attrib_path}. Skipping segment {unit_n}.")
             continue
@@ -363,7 +363,7 @@ def predict_notes(audio_file_path: str, model_path: str, tempo: float, output_di
         tab = [[int(element) for element in row] for row in tab]
         segment_tabs.append(tab)
         # Save per-segment prediction
-        seg_pred_path = os.path.join(model.prediction_dir, f"note_prediction_segment_{i:02d}.npy")
+        seg_pred_path = os.path.join(model.prediction_dir, f"{track_name}_note_prediction_segment_{i:02d}.npy")
         np.save(seg_pred_path, np.array(tab, dtype=int))
 
     concatenated = [row for seg in segment_tabs for row in seg]
@@ -496,7 +496,6 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
 
     all_note_level: list[int] = []
     all_frame_level: list[int] = []
-    all_frame_full_attribs: list[list[int]] = []
 
     for i in range(len(final_tech_preds)):
         # Slice to actual lengths to avoid padding artifacts
@@ -521,37 +520,41 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
         final_tech_prediction_note_level = model.tatum_to_note(final_tech_prediction, dur, pitch_string_fret)
         frame_level_final_tech_prediction = [frame_level_final_tech_preds[i]]
         frame_level_final_tech_prediction = [int(element) for row in frame_level_final_tech_prediction for element in row]
+        frame_level_full_attribs = [
+            sublist + [element]
+            for sublist, element in zip(
+                frame_level_note_attribs_i, frame_level_final_tech_prediction
+            )
+        ]
 
         # Save per-segment outputs (TSV)
-        seg_note_tsv = os.path.join("./output/full_tech_prediction", f"note_level_final_tech_full_prediction_segment_{i:02d}.tsv")
+        seg_note_tsv = os.path.join("./output/full_tech_prediction", f"{track_name}_note_level_final_tech_full_prediction_segment_{i:02d}.tsv")
         _write_tsv(seg_note_tsv, final_tech_prediction_note_level)
 
-        seg_frame_tsv = os.path.join("./output/frame_level_full_tech_prediction", f"frame_level_final_tech_prediction_segment_{i:02d}.tsv")
-        _write_tsv(seg_frame_tsv, frame_level_final_tech_prediction)
-
-        seg_frame_full_tsv = os.path.join("./output/frame_level_full_tech_prediction", f"frame_level_note_attribs_segment_{i:02d}.tsv")
-        frame_level_full_attribs = [sub + [elem] for sub, elem in zip(frame_level_note_attribs_i, frame_level_final_tech_prediction)]
-        _write_tsv(seg_frame_full_tsv, frame_level_full_attribs)
+        seg_frame_tsv = os.path.join("./output/frame_level_full_tech_prediction", f"{track_name}_frame_level_final_tech_prediction_segment_{i:02d}.tsv")
+        _write_tsv(seg_frame_tsv, frame_level_full_attribs)
 
         # Accumulate for concatenated outputs
         all_note_level.extend(final_tech_prediction_note_level)
         all_frame_level.extend(frame_level_final_tech_prediction)
-        all_frame_full_attribs.extend(frame_level_full_attribs)
 
     # Save concatenated outputs (TSV)
-    concat_note_tsv = os.path.join("./output/full_tech_prediction", "note_level_final_tech_full_prediction.tsv")
+    concat_note_tsv = os.path.join(
+        "./output/full_tech_prediction",
+        f"{track_name}_note_level_final_tech_full_prediction.tsv",
+    )
     _write_tsv(concat_note_tsv, all_note_level)
 
-    concat_frame_tsv = os.path.join("./output/frame_level_full_tech_prediction", "frame_level_final_tech_prediction.tsv")
+    concat_frame_tsv = os.path.join(
+        "./output/frame_level_full_tech_prediction",
+        f"{track_name}_frame_level_final_tech_prediction.tsv",
+    )
     _write_tsv(concat_frame_tsv, all_frame_level)
-
-    concat_frame_full_tsv = os.path.join("./output/frame_level_full_tech_prediction", "frame_level_note_attribs.tsv")
-    _write_tsv(concat_frame_full_tsv, all_frame_full_attribs)
 
     return final_tech_preds, frame_level_final_tech_preds
 
 if __name__ == "__main__":
-    audio_file = "./data/20_1.wav"
+    audio_file = "./idea-20250609.mp3"
     tech_model_checkpoint = "./solo_tech_epoch_099.ckpt"
     note_model_checkpoint = "./solo_trans_epoch_099.ckpt" 
 
