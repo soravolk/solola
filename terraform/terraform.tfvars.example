@@ -1,0 +1,25 @@
+# Terraform variables for eg-solo-inference Lambda
+# Fill in your values and rename to terraform.tfvars (don't commit to git!)
+
+aws_region     = "us-east-1"
+function_name  = "eg-solo-inference"
+
+# Get this from your build_and_push.sh output
+# Format: <account>.dkr.ecr.<region>.amazonaws.com/eg-solo-lambda:latest
+image_uri      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/eg-solo-lambda:latest"
+
+lambda_timeout = 900
+lambda_memory  = 2048
+
+# S3 bucket for audio input and outputs
+s3_bucket_name = "my-eg-solo-bucket"
+s3_bucket_arn  = "arn:aws:s3:::my-eg-solo-bucket"
+
+# VPC config (optional; leave empty for no VPC)
+subnet_ids         = []
+security_group_ids = []
+
+tags = {
+  Project = "eg-solo"
+  Env     = "dev"
+}

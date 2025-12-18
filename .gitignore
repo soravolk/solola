@@ -38,3 +38,13 @@ frame_level_pred
 full_tech_prediction
 *.ckpt
 *.mp3
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+.tfvars
+terraform.tfvars
+!terraform.tfvars.example
+.env.local

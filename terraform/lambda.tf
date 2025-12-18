@@ -75,3 +75,80 @@ resource "aws_cloudwatch_log_group" "api_lambda" {
     Project = "eg-solo"
   }
 }
+
+# lambda to run fargate inference
+resource "aws_iam_role" "lambda_role" {
+  name = "${var.function_name}-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Attach basic execution policy (CloudWatch logs)
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# S3 access policy (for reading audio and writing outputs)
+resource "aws_iam_role_policy" "lambda_s3_policy" {
+  name = "${var.function_name}-s3-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = [
+          "${var.s3_bucket_arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = var.s3_bucket_arn
+      }
+    ]
+  })
+}
+
+# Lambda function from ECR image
+resource "aws_lambda_function" "inference" {
+  function_name = var.function_name
+  role          = aws_iam_role.lambda_role.arn
+  timeout       = var.lambda_timeout
+  memory_size   = var.lambda_memory
+
+  package_type = "Image"
+  image_uri    = var.image_uri
+
+  vpc_config {
+    subnet_ids         = var.subnet_ids
+    security_group_ids = var.security_group_ids
+  }
+
+  environment {
+    variables = {
+      S3_BUCKET_NAME = var.s3_bucket_name
+    }
+  }
+
+  tags = var.tags
+}

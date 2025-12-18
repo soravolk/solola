@@ -17,3 +17,18 @@ output "api_endpoint_url" {
   description = "Full API endpoint URL"
   value       = "${aws_apigatewayv2_api.api.api_endpoint}/api/v1/audio"
 }
+
+output "lambda_function_name" {
+  description = "Name of the Lambda function"
+  value       = aws_lambda_function.inference.function_name
+}
+
+output "lambda_function_arn" {
+  description = "ARN of the Lambda function"
+  value       = aws_lambda_function.inference.arn
+}
+
+output "lambda_role_arn" {
+  description = "ARN of the Lambda execution role"
+  value       = aws_iam_role.lambda_role.arn
+}
