@@ -44,8 +44,8 @@ echo "  Docker login successful"
 echo ""
 
 # Build image
-echo "[3/4] Building Docker image..."
-docker build -t $IMAGE_NAME:latest .
+echo "[3/4] Building Docker image (forcing linux/amd64)..."
+docker build --platform linux/amd64 -t $IMAGE_NAME:latest .
 echo "  Build complete"
 echo ""
 
