@@ -138,6 +138,7 @@ resource "aws_lambda_function" "inference" {
 
   package_type = "Image"
   image_uri    = var.image_uri
+  architectures = ["x86_64"]
 
   vpc_config {
     subnet_ids         = var.subnet_ids
@@ -146,7 +147,9 @@ resource "aws_lambda_function" "inference" {
 
   environment {
     variables = {
-      S3_BUCKET_NAME = var.s3_bucket_name
+      S3_BUCKET_NAME    = var.s3_bucket_name
+      NUMBA_CACHE_DIR   = "/tmp/numba_cache"
+      NUMBA_DISABLE_JIT = "0"
     }
   }
 
