@@ -10,6 +10,7 @@ from inference import (
     generate_frame_level_attributes,
     predict_notes,
     predict_techniques,
+    process_cqt,
 )
 
 s3_client = boto3.client("s3")
@@ -110,7 +111,21 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     # 4. Run Inference Pipeline
     print("Running inference...")
     
+    # Step 1: Generate CQT segments (required before predict_notes)
+    print("Generating CQT segments...")
+    process_cqt(
+        audio=audio,
+        tempo=tempo,
+        original_sr=original_sr,
+        track_name=track_name,
+        split_unit_in_bars=SPLIT_UNIT_IN_BARS,
+        split_hop_bar_len=SPLIT_HOP_BAR_LEN,
+        hparams=CQT_HPARAMS,
+        output_dir=OUTPUT_DIR,
+    )
+    
     # Step 2: Predict Notes
+    print("Predicting notes...")
     predict_notes(
         audio_file_path=local_audio_path,
         model_path=NOTE_MODEL_CHECKPOINT,
