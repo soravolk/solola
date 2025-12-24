@@ -4,6 +4,7 @@ FROM public.ecr.aws/lambda/python:3.10
 
 # Install build tools required for compiling native Python packages
 # (h5py, llvmlite, sentencepiece, scikit-learn, etc.)
+# Also install libsndfile for librosa audio loading
 RUN yum -y install \
     gcc gcc-c++ make \
     cmake3 \
@@ -11,6 +12,7 @@ RUN yum -y install \
     hdf5-devel \
     libffi-devel \
     openssl-devel \
+    libsndfile \
  && ln -sf /usr/bin/cmake3 /usr/bin/cmake \
  && yum clean all
 
