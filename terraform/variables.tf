@@ -23,9 +23,9 @@ variable "lambda_timeout" {
 }
 
 variable "lambda_memory" {
-  description = "Lambda function memory in MB"
+  description = "Lambda function memory in MB (max 10240, account limit may be 3008)"
   type        = number
-  default     = 2048
+  default     = 3008
 }
 
 variable "s3_bucket_name" {
@@ -90,4 +90,29 @@ variable "tags" {
     Project = "eg-solo"
     Env     = "dev"
   }
+}
+
+# --------- Fargate Configuration --------- #
+variable "fargate_cpu" {
+  description = "Fargate task CPU units (1024 = 1 vCPU)"
+  type        = number
+  default     = 2048  # 2 vCPU
+}
+
+variable "fargate_memory" {
+  description = "Fargate task memory in MB"
+  type        = number
+  default     = 8192  # 8 GB
+}
+
+variable "fargate_subnet_ids" {
+  description = "Subnet IDs for Fargate tasks (must have internet access for ECR)"
+  type        = list(string)
+  default     = []
+}
+
+variable "fargate_security_group_ids" {
+  description = "Security group IDs for Fargate tasks"
+  type        = list(string)
+  default     = []
 }

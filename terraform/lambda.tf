@@ -140,16 +140,26 @@ resource "aws_lambda_function" "inference" {
   image_uri    = var.image_uri
   architectures = ["x86_64"]
 
-  vpc_config {
-    subnet_ids         = var.subnet_ids
-    security_group_ids = var.security_group_ids
+  # Only configure VPC if subnet_ids are provided
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
   }
 
   environment {
     variables = {
-      S3_BUCKET_NAME    = var.s3_bucket_name
-      NUMBA_CACHE_DIR   = "/tmp/numba_cache"
-      NUMBA_DISABLE_JIT = "0"
+      S3_BUCKET_NAME       = var.s3_bucket_name
+      NUMBA_CACHE_DIR      = "/tmp/numba_cache"
+      NUMBA_DISABLE_JIT    = "0"
+      MPLCONFIGDIR         = "/tmp/matplotlib"
+      # Fargate configuration (for handler_fargate.py)
+      ECS_CLUSTER          = aws_ecs_cluster.inference.name
+      ECS_TASK_DEFINITION  = aws_ecs_task_definition.inference.family
+      ECS_SUBNETS          = join(",", [aws_subnet.public_1.id, aws_subnet.public_2.id])
+      ECS_SECURITY_GROUPS  = aws_security_group.fargate.id
     }
   }
 
