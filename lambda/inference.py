@@ -383,7 +383,7 @@ def predict_notes(audio_file_path: str, model_path: str, tempo: float, output_di
                     "index": i,
                     "cqt_file": segment_files[i],
                     "prediction_file": os.path.join(
-                        model.prediction_dir, f"note_prediction_segment_{i:02d}.npy"
+                        model.prediction_dir, f"{track_name}_note_prediction_segment_{i:02d}.npy"
                     ),
                     "frames": lengths[i],
                 }
@@ -453,8 +453,8 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
     for i, cqt_seg_path in enumerate(segment_files):
         # Get segment index from filename
         seg_name = os.path.basename(cqt_seg_path)[:-4]  # Remove .npy
-        
-        note_attr_path = os.path.join(pred_dir, f"note_prediction_segment_{i:02d}.npy")
+
+        note_attr_path = os.path.join(pred_dir, f"{track_name}_note_prediction_segment_{i:02d}.npy")
         frame_level_path = os.path.join(frame_level_dir, f"{seg_name}.npy")
             
         cqt, note_attrib, frame_level_note_attrib = preprocess_audio_for_tech_inference(
