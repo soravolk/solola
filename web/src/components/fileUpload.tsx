@@ -37,15 +37,32 @@ export const FileUpload = () => {
         },
       };
 
-      const response = await fetch("http://localhost:8000/api/v1/audio", {
+      const apiUrl =
+        import.meta.env.VITE_API_URL ||
+        "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/audio";
+
+      console.log("API URL:", apiUrl);
+      console.log("Request data:", requestData);
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestData),
       });
 
-      if (!response.ok) throw new Error(`Failed to get presigned URL`);
+      console.log("Response status:", response.status);
+      console.log(
+        "Response headers:",
+        Object.fromEntries(response.headers.entries())
+      );
 
-      const result = (await response.json()) as GetUploadURLResponse;
+      const responseText = await response.text();
+      console.log("Response body:", responseText);
+
+      if (!response.ok)
+        throw new Error(`Failed to get presigned URL: ${response.status}`);
+
+      const result = JSON.parse(responseText) as GetUploadURLResponse;
       const { upload_url, id } = result;
 
       // Step 2: Upload file directly to S3
