@@ -1,4 +1,3 @@
-import reactLogo from "./assets/react.svg";
 import "./App.css";
 import { FileUpload } from "./components/fileUpload";
 
@@ -20,18 +19,7 @@ const Header: React.FC = () => {
           padding: "20px",
         }}
       >
-        <img
-          src={reactLogo}
-          className="logo"
-          alt="React logo"
-          style={{
-            height: "60px",
-            marginRight: "20px",
-            padding: "0.5em",
-            filter: "invert(1)", // invert colors for good contrast on dark background
-          }}
-        />
-        <h1 style={{ margin: 0, color: "#fff" }}>EG Solo App</h1>
+        <h1 style={{ margin: 0, color: "#fff" }}>Solola</h1>
       </div>
     </header>
   );
