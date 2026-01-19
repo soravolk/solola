@@ -88,24 +88,41 @@ export const FileUpload = () => {
   };
 
   const handleGenerate = async () => {
-    if (!uploadedFileId) return;
+    if (!uploadedFileId || !selectedFile) return;
 
     setIsGenerating(true);
 
     try {
-      // TODO: Call your generate API endpoint
-      console.log("Generating tabs for file ID:", uploadedFileId);
+      const generateUrl =
+        "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/generate";
 
-      // Example API call (adjust based on your backend):
-      // const response = await fetch(`${apiUrl}/generate`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ audio_id: uploadedFileId }),
-      // });
+      console.log("Triggering inference for file ID:", uploadedFileId);
 
-      alert(`Starting tab generation for file ID: ${uploadedFileId}`);
+      const response = await fetch(generateUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_id: uploadedFileId,
+          filename: selectedFile.name,
+        }),
+      });
 
-      // TODO: Handle the response and show results
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Generation failed: ${response.status}`
+        );
+      }
+
+      console.log("Generation response:", result);
+      alert(
+        `✓ Generation started!\nTask ID: ${
+          result.task_id || uploadedFileId
+        }\nStatus: ${result.status}`
+      );
+
+      // TODO: Poll for results or show status page
     } catch (error) {
       alert("Generation failed. Please try again.");
       console.error("Generation error:", error);

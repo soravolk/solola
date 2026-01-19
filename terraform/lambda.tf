@@ -37,9 +37,27 @@ resource "aws_iam_role_policy" "api_lambda_s3" {
       Action = [
         "s3:PutObject",
         "s3:PutObjectAcl",
-        "s3:GetObject"
+        "s3:GetObject",
+        "s3:HeadObject"
       ]
       Resource = "${var.s3_bucket_arn}/*"
+    }]
+  })
+}
+
+# Permission to invoke inference Lambda
+resource "aws_iam_role_policy" "api_lambda_invoke" {
+  name = "invoke-inference-lambda"
+  role = aws_iam_role.api_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "lambda:InvokeFunction"
+      ]
+      Resource = aws_lambda_function.inference.arn
     }]
   })
 }
@@ -55,7 +73,8 @@ resource "aws_lambda_function" "api_handler" {
 
   environment {
     variables = {
-      S3_BUCKET_NAME = var.s3_bucket_name
+      S3_BUCKET_NAME       = var.s3_bucket_name
+      INFERENCE_LAMBDA_ARN = aws_lambda_function.inference.arn
     }
   }
 

@@ -33,6 +33,13 @@ resource "aws_apigatewayv2_route" "audio_post" {
   target    = "integrations/${aws_apigatewayv2_integration.api_lambda.id}"
 }
 
+# Route: POST /api/v1/generate (trigger inference)
+resource "aws_apigatewayv2_route" "generate_post" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /api/v1/generate"
+  target    = "integrations/${aws_apigatewayv2_integration.api_lambda.id}"
+}
+
 # Route: GET / (health check)
 resource "aws_apigatewayv2_route" "root_get" {
   api_id    = aws_apigatewayv2_api.api.id
