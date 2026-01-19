@@ -1,0 +1,5 @@
+{
+  "httpMethod": "POST",
+  "rawPath": "/api/v1/audio",
+  "body": "{\"source_type\":\"local\",\"source\":{\"filename\":\"test.mp3\",\"content_type\":\"audio/mpeg\"}}"
+}
