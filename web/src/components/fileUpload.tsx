@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 interface GetUploadURLResponse {
@@ -15,31 +15,71 @@ export const FileUpload = () => {
   const [generationStatus, setGenerationStatus] = useState<string>("");
   const [generationProgress, setGenerationProgress] = useState<number>(0);
 
-  // WebSocket connection
-  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || "wss://vz9wg4syuh.execute-api.us-east-1.amazonaws.com/prod";
-  const { isConnected, lastMessage } = useWebSocket(wsUrl);
+  // Generate or retrieve userId
+  const userId = useMemo(() => {
+    let id = sessionStorage.getItem("userId");
+    if (!id) {
+      id = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem("userId", id);
+      console.log("Generated new userId:", id);
+    } else {
+      console.log("Retrieved existing userId:", id);
+    }
+    return id;
+  }, []);
+
+  // WebSocket connection with userId
+  const wsUrl =
+    import.meta.env.VITE_WEBSOCKET_URL ||
+    "wss://vz9wg4syuh.execute-api.us-east-1.amazonaws.com/prod";
+  const { isConnected, lastMessage } = useWebSocket(wsUrl, userId);
 
   // Handle WebSocket messages
   useEffect(() => {
     if (lastMessage) {
       console.log("WebSocket message received:", lastMessage);
-      
+
       switch (lastMessage.type) {
-        case 'transcription_progress':
-          setGenerationProgress(lastMessage.progress || 0);
-          setGenerationStatus(lastMessage.message || "Processing...");
+        case "generation_progress":
+          setGenerationProgress(lastMessage.data?.progress || 0);
+          setGenerationStatus(lastMessage.data?.message || "Processing...");
           break;
-        case 'transcription_complete':
+        case "generation_complete":
           setGenerationStatus("Complete!");
           setGenerationProgress(100);
           setIsGenerating(false);
-          alert(`✓ Transcription complete!\n${JSON.stringify(lastMessage.result, null, 2)}`);
+          alert(
+            `✓ Generation complete!\nFile: ${lastMessage.data?.fileName || "Unknown"}\nResult URL: ${lastMessage.data?.resultUrl || "N/A"}`,
+          );
           break;
-        case 'error':
+        case "generation_error":
           setGenerationStatus("Error occurred");
+          setGenerationProgress(0);
+          setIsGenerating(false);
+          alert(
+            `Error: ${lastMessage.data?.error || lastMessage.message || "Unknown error"}`,
+          );
+          break;
+        case "transcription_progress":
+          setGenerationProgress(lastMessage.progress || 0);
+          setGenerationStatus(lastMessage.message || "Processing...");
+          break;
+        case "transcription_complete":
+          setGenerationStatus("Complete!");
+          setGenerationProgress(100);
+          setIsGenerating(false);
+          alert(
+            `✓ Transcription complete!\n${JSON.stringify(lastMessage.result, null, 2)}`,
+          );
+          break;
+        case "error":
+          setGenerationStatus("Error occurred");
+          setGenerationProgress(0);
           setIsGenerating(false);
           alert(`Error: ${lastMessage.message}`);
           break;
+        default:
+          console.log("Unknown message type:", lastMessage.type);
       }
     }
   }, [lastMessage]);
@@ -88,7 +128,7 @@ export const FileUpload = () => {
       console.log("Response status:", response.status);
       console.log(
         "Response headers:",
-        Object.fromEntries(response.headers.entries())
+        Object.fromEntries(response.headers.entries()),
       );
 
       const responseText = await response.text();
@@ -123,12 +163,15 @@ export const FileUpload = () => {
     if (!uploadedFileId || !selectedFile) return;
 
     setIsGenerating(true);
+    setGenerationProgress(0);
+    setGenerationStatus("Starting generation...");
 
     try {
       const generateUrl =
         "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/generate";
 
       console.log("Triggering inference for file ID:", uploadedFileId);
+      console.log("User ID:", userId);
 
       const response = await fetch(generateUrl, {
         method: "POST",
@@ -136,6 +179,7 @@ export const FileUpload = () => {
         body: JSON.stringify({
           file_id: uploadedFileId,
           filename: selectedFile.name,
+          user_id: userId, // Pass userId to backend
         }),
       });
 
@@ -143,23 +187,27 @@ export const FileUpload = () => {
 
       if (!response.ok) {
         throw new Error(
-          result.error || `Generation failed: ${response.status}`
+          result.error || `Generation failed: ${response.status}`,
         );
       }
 
       console.log("Generation response:", result);
-      alert(
+      setGenerationStatus("Generation started - waiting for updates...");
+
+      // Don't show alert immediately - let WebSocket messages handle UI updates
+      console.log(
         `✓ Generation started!\nTask ID: ${
           result.task_id || uploadedFileId
-        }\nStatus: ${result.status}`
+        }\nStatus: ${result.status}\nProgress updates will arrive via WebSocket`,
       );
 
-      // TODO: Poll for results or show status page
+      // Progress updates will come via WebSocket
     } catch (error) {
+      setGenerationStatus("Failed to start generation");
+      setIsGenerating(false);
+      setGenerationProgress(0);
       alert("Generation failed. Please try again.");
       console.error("Generation error:", error);
-    } finally {
-      setIsGenerating(false);
     }
   };
 
@@ -192,45 +240,79 @@ export const FileUpload = () => {
   return (
     <section style={{ width: "60%" }}>
       {/* WebSocket Status Indicator */}
-      <div style={{ 
-        marginBottom: "1em", 
-        padding: "0.5em 1em", 
-        backgroundColor: isConnected ? "rgba(76, 175, 80, 0.1)" : "rgba(255, 152, 0, 0.1)",
-        borderLeft: `4px solid ${isConnected ? "#4CAF50" : "#FF9800"}`,
-        borderRadius: "4px",
-        fontSize: "0.9em"
-      }}>
-        <span style={{ marginRight: "0.5em" }}>
-          {isConnected ? "🟢" : "🟡"}
-        </span>
-        <strong>WebSocket:</strong> {isConnected ? "Connected" : "Connecting..."}
+      <div
+        style={{
+          marginBottom: "1em",
+          padding: "0.5em 1em",
+          backgroundColor: isConnected
+            ? "rgba(76, 175, 80, 0.1)"
+            : "rgba(255, 152, 0, 0.1)",
+          borderLeft: `4px solid ${isConnected ? "#4CAF50" : "#FF9800"}`,
+          borderRadius: "4px",
+          fontSize: "0.9em",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <span style={{ marginRight: "0.5em" }}>
+              {isConnected ? "🟢" : "🟡"}
+            </span>
+            <strong>WebSocket:</strong>{" "}
+            {isConnected ? "Connected" : "Connecting..."}
+          </div>
+          <div style={{ fontSize: "0.8em", color: "#666" }}>
+            User:{" "}
+            <code
+              style={{
+                backgroundColor: "rgba(0,0,0,0.05)",
+                padding: "2px 6px",
+                borderRadius: "3px",
+              }}
+            >
+              {userId.substring(0, 16)}...
+            </code>
+          </div>
+        </div>
       </div>
 
       {/* Generation Progress */}
       {isGenerating && (
-        <div style={{
-          marginBottom: "1em",
-          padding: "1em",
-          backgroundColor: "rgba(33, 150, 243, 0.1)",
-          borderRadius: "4px",
-          border: "1px solid #2196F3"
-        }}>
-          <div style={{ marginBottom: "0.5em" }}>
-            <strong>Generation Status:</strong> {generationStatus || "Starting..."}
-          </div>
-          <div style={{
-            width: "100%",
-            height: "8px",
-            backgroundColor: "#e0e0e0",
+        <div
+          style={{
+            marginBottom: "1em",
+            padding: "1em",
+            backgroundColor: "rgba(33, 150, 243, 0.1)",
             borderRadius: "4px",
-            overflow: "hidden"
-          }}>
-            <div style={{
-              width: `${generationProgress}%`,
-              height: "100%",
-              backgroundColor: "#2196F3",
-              transition: "width 0.3s ease"
-            }} />
+            border: "1px solid #2196F3",
+          }}
+        >
+          <div style={{ marginBottom: "0.5em" }}>
+            <strong>Generation Status:</strong>{" "}
+            {generationStatus || "Starting..."}
+          </div>
+          <div
+            style={{
+              width: "100%",
+              height: "8px",
+              backgroundColor: "#e0e0e0",
+              borderRadius: "4px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${generationProgress}%`,
+                height: "100%",
+                backgroundColor: "#2196F3",
+                transition: "width 0.3s ease",
+              }}
+            />
           </div>
           <div style={{ marginTop: "0.5em", fontSize: "0.9em", color: "#666" }}>
             Progress: {generationProgress}%
