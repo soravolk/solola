@@ -60,6 +60,7 @@ def lambda_handler(event, context):
             
             file_id = body.get('file_id')
             filename = body.get('filename')
+            user_id = body.get('user_id', 'anonymous')  # Accept userId from frontend
             
             if not file_id or not filename:
                 return {
@@ -67,6 +68,8 @@ def lambda_handler(event, context):
                     'headers': headers,
                     'body': json.dumps({'error': 'Missing file_id or filename'})
                 }
+            
+            print(f"Processing generation request - File ID: {file_id}, User ID: {user_id}")
             
             # Determine file extension from filename
             file_extension = os.path.splitext(filename)[1] if filename else '.mp3'
@@ -83,10 +86,11 @@ def lambda_handler(event, context):
                 }
             
             # Invoke inference Lambda asynchronously
-            # The inference Lambda expects: { "audio_key": "uploads/...", "bucket": "..." }
+            # Pass userId to inference Lambda so it can forward to ECS
             inference_payload = {
                 "audio_key": audio_key,
-                "bucket": BUCKET_NAME
+                "bucket": BUCKET_NAME,
+                "user_id": user_id  # Pass userId to inference Lambda
             }
             
             response = lambda_client.invoke(
@@ -102,7 +106,8 @@ def lambda_handler(event, context):
                     "status": "PENDING",
                     "message": "Inference task started",
                     "file_id": file_id,
-                    "audio_key": audio_key
+                    "audio_key": audio_key,
+                    "user_id": user_id  # Return userId for confirmation
                 })
             }
             

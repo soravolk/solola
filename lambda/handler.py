@@ -19,18 +19,22 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler that triggers a Fargate task for ML inference.
     
-    Event: { "audio_key": "uploads/song.wav", "bucket": "my-bucket" }
+    Event: { "audio_key": "uploads/song.wav", "bucket": "my-bucket", "user_id": "user-123" }
     
     Returns: { "task_id": "...", "status": "PENDING" }
     """
     bucket = event.get("bucket", S3_BUCKET)
     audio_key = event.get("audio_key")
+    user_id = event.get("user_id", "anonymous")  # Accept userId from API Lambda
     
     if not audio_key:
         return {
             "statusCode": 400,
             "body": json.dumps({"error": "Missing 'audio_key' in request"})
         }
+    
+    print(f"Starting inference - Audio: {audio_key}, User: {user_id}")
+    print(f"[DEBUG] user_id type: {type(user_id)}, value: '{user_id}'")
     
     # Generate unique task ID
     task_id = str(uuid.uuid4())
@@ -56,6 +60,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     # Start Fargate task
     try:
+        print(f"[DEBUG] About to start ECS task with USER_ID: '{user_id}'")
+        print(f"[DEBUG] Environment overrides: BUCKET={bucket}, AUDIO_KEY={audio_key}, TASK_ID={task_id}, USER_ID={user_id}")
+        
         response = ecs_client.run_task(
             cluster=ECS_CLUSTER,
             taskDefinition=ECS_TASK_DEFINITION,
@@ -75,6 +82,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             {"name": "BUCKET", "value": bucket},
                             {"name": "AUDIO_KEY", "value": audio_key},
                             {"name": "TASK_ID", "value": task_id},
+                            {"name": "USER_ID", "value": user_id},  # Pass userId to ECS task
                         ]
                     }
                 ]
@@ -82,6 +90,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             tags=[
                 {"key": "TaskId", "value": task_id},
                 {"key": "AudioKey", "value": audio_key},
+                {"key": "UserId", "value": user_id},  # Tag task with userId
             ]
         )
         
@@ -103,6 +112,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "status": "PENDING",
                 "task_id": task_id,
                 "ecs_task_arn": ecs_task_arn,
+                "user_id": user_id,  # Include userId in response
                 "message": "Inference task started. Poll for results.",
                 "result_location": f"s3://{bucket}/inference_results/{task_id}/"
             })
