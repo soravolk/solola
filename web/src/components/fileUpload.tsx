@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 interface GetUploadURLResponse {
   upload_url: string;
@@ -11,6 +12,37 @@ export const FileUpload = () => {
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [uploadedFileId, setUploadedFileId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [generationStatus, setGenerationStatus] = useState<string>("");
+  const [generationProgress, setGenerationProgress] = useState<number>(0);
+
+  // WebSocket connection
+  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || "wss://vz9wg4syuh.execute-api.us-east-1.amazonaws.com/prod";
+  const { isConnected, lastMessage } = useWebSocket(wsUrl);
+
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (lastMessage) {
+      console.log("WebSocket message received:", lastMessage);
+      
+      switch (lastMessage.type) {
+        case 'transcription_progress':
+          setGenerationProgress(lastMessage.progress || 0);
+          setGenerationStatus(lastMessage.message || "Processing...");
+          break;
+        case 'transcription_complete':
+          setGenerationStatus("Complete!");
+          setGenerationProgress(100);
+          setIsGenerating(false);
+          alert(`✓ Transcription complete!\n${JSON.stringify(lastMessage.result, null, 2)}`);
+          break;
+        case 'error':
+          setGenerationStatus("Error occurred");
+          setIsGenerating(false);
+          alert(`Error: ${lastMessage.message}`);
+          break;
+      }
+    }
+  }, [lastMessage]);
 
   const updateFileUploadStatus = (file: File | null) => {
     if (file) {
@@ -159,6 +191,53 @@ export const FileUpload = () => {
 
   return (
     <section style={{ width: "60%" }}>
+      {/* WebSocket Status Indicator */}
+      <div style={{ 
+        marginBottom: "1em", 
+        padding: "0.5em 1em", 
+        backgroundColor: isConnected ? "rgba(76, 175, 80, 0.1)" : "rgba(255, 152, 0, 0.1)",
+        borderLeft: `4px solid ${isConnected ? "#4CAF50" : "#FF9800"}`,
+        borderRadius: "4px",
+        fontSize: "0.9em"
+      }}>
+        <span style={{ marginRight: "0.5em" }}>
+          {isConnected ? "🟢" : "🟡"}
+        </span>
+        <strong>WebSocket:</strong> {isConnected ? "Connected" : "Connecting..."}
+      </div>
+
+      {/* Generation Progress */}
+      {isGenerating && (
+        <div style={{
+          marginBottom: "1em",
+          padding: "1em",
+          backgroundColor: "rgba(33, 150, 243, 0.1)",
+          borderRadius: "4px",
+          border: "1px solid #2196F3"
+        }}>
+          <div style={{ marginBottom: "0.5em" }}>
+            <strong>Generation Status:</strong> {generationStatus || "Starting..."}
+          </div>
+          <div style={{
+            width: "100%",
+            height: "8px",
+            backgroundColor: "#e0e0e0",
+            borderRadius: "4px",
+            overflow: "hidden"
+          }}>
+            <div style={{
+              width: `${generationProgress}%`,
+              height: "100%",
+              backgroundColor: "#2196F3",
+              transition: "width 0.3s ease"
+            }} />
+          </div>
+          <div style={{ marginTop: "0.5em", fontSize: "0.9em", color: "#666" }}>
+            Progress: {generationProgress}%
+          </div>
+        </div>
+      )}
+
       <div
         onClick={() => {
           const fileInput = document.getElementById("fileInput");
