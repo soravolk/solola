@@ -165,6 +165,24 @@ resource "aws_iam_role_policy" "lambda_ecs_policy" {
   })
 }
 
+resource "aws_iam_role_policy" "ecs_task_invoke_notification_lambda" {
+  name = "ecs-task-invoke-notification-lambda"
+  role = aws_iam_role.ecs_task.id  # Your existing ECS task role
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = "arn:aws:lambda:${var.aws_region}:*:function:eg-solo-websocket-notification"
+      }
+    ]
+  })
+}
+
 # Outputs
 output "ecs_cluster_name" {
   description = "ECS Cluster name"

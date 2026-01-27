@@ -6,6 +6,7 @@ Usage: Fargate task passes environment variables:
   - AUDIO_KEY: S3 key of the audio file
   - BUCKET: S3 bucket name
   - TASK_ID: Unique task identifier for output
+  - USER_ID: User identifier for WebSocket notifications
 """
 
 import os
@@ -24,6 +25,7 @@ from inference import (
 )
 
 s3_client = boto3.client("s3")
+lambda_client = boto3.client("lambda")
 
 # Configuration (same as handler.py)
 CQT_HPARAMS = {
@@ -48,6 +50,84 @@ WORK_DIR = "/tmp"
 DATA_DIR = os.path.join(WORK_DIR, "data")
 OUTPUT_DIR = os.path.join(WORK_DIR, "output")
 NOTE_PREDICTION_DIR = os.path.join(OUTPUT_DIR, "note_prediction")
+
+
+# === Notification Functions ===
+
+
+def notify_progress(user_id, progress, message):
+    """Send progress update to user via WebSocket notification Lambda."""
+    if not user_id or user_id == "anonymous":
+        print(f"[NOTIFY] Skipping notification (no userId): {message}")
+        return
+    
+    try:
+        payload = {
+            "userId": user_id,
+            "type": "transcription_progress",
+            "progress": progress,
+            "message": message
+        }
+        lambda_client.invoke(
+            FunctionName="eg-solo-websocket-notification",
+            InvocationType="Event",  # Async invocation
+            Payload=json.dumps(payload)
+        )
+        print(f"[NOTIFY] Progress {progress}%: {message}")
+    except Exception as e:
+        print(f"[NOTIFY ERROR] Failed to send progress notification: {e}")
+
+
+def notify_complete(user_id, result_url, filename):
+    """Send completion notification to user via WebSocket notification Lambda."""
+    if not user_id or user_id == "anonymous":
+        print(f"[NOTIFY] Skipping completion notification (no userId)")
+        return
+    
+    try:
+        payload = {
+            "userId": user_id,
+            "type": "transcription_complete",
+            "result": {
+                "resultUrl": result_url,
+                "fileName": filename
+            },
+            "progress": 100,
+            "message": "Generation completed successfully!"
+        }
+        lambda_client.invoke(
+            FunctionName="eg-solo-websocket-notification",
+            InvocationType="Event",  # Async invocation
+            Payload=json.dumps(payload)
+        )
+        print(f"[NOTIFY] Completion sent: {filename}")
+    except Exception as e:
+        print(f"[NOTIFY ERROR] Failed to send completion notification: {e}")
+
+
+def notify_error(user_id, error_message):
+    """Send error notification to user via WebSocket notification Lambda."""
+    if not user_id or user_id == "anonymous":
+        print(f"[NOTIFY] Skipping error notification (no userId): {error_message}")
+        return
+    
+    try:
+        payload = {
+            "userId": user_id,
+            "type": "error",
+            "message": error_message
+        }
+        lambda_client.invoke(
+            FunctionName="eg-solo-websocket-notification",
+            InvocationType="Event",  # Async invocation
+            Payload=json.dumps(payload)
+        )
+        print(f"[NOTIFY] Error sent: {error_message}")
+    except Exception as e:
+        print(f"[NOTIFY ERROR] Failed to send error notification: {e}")
+
+
+# === Helper Functions ===
 
 
 def _safe_mkdirs():
@@ -81,112 +161,142 @@ def _upload_results_to_s3(bucket, prefix, track_name):
     return uploaded_files
 
 
-def run_inference(bucket: str, audio_key: str, task_id: str = None):
-    """Run the full inference pipeline."""
+def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str = None):
+    """Run the full inference pipeline with WebSocket notifications."""
     print(f"=" * 60)
     print(f"Fargate Inference Task")
     print(f"=" * 60)
     print(f"Bucket: {bucket}")
     print(f"Audio Key: {audio_key}")
     print(f"Task ID: {task_id}")
+    print(f"User ID: {user_id}")
     print(f"=" * 60)
     
-    # 1. Prepare environment
-    print("\n[1/6] Preparing environment...")
-    _safe_mkdirs()
-
-    # 2. Download Audio from S3
-    print(f"\n[2/6] Downloading audio from S3...")
-    local_audio_path = os.path.join(DATA_DIR, os.path.basename(audio_key))
     try:
-        s3_client.download_file(bucket, audio_key, local_audio_path)
-        print(f"  Downloaded to: {local_audio_path}")
+        # 1. Prepare environment
+        print("\n[1/6] Preparing environment...")
+        notify_progress(user_id, 10, "Preparing environment...")
+        _safe_mkdirs()
+
+        # 2. Download Audio from S3
+        print(f"\n[2/6] Downloading audio from S3...")
+        notify_progress(user_id, 25, "Downloading audio file...")
+        local_audio_path = os.path.join(DATA_DIR, os.path.basename(audio_key))
+        try:
+            s3_client.download_file(bucket, audio_key, local_audio_path)
+            print(f"  Downloaded to: {local_audio_path}")
+        except Exception as e:
+            error_msg = f"Could not download audio: {e}"
+            print(f"  ERROR: {error_msg}")
+            notify_error(user_id, error_msg)
+            sys.exit(1)
+        
+        track_name = os.path.splitext(os.path.basename(local_audio_path))[0]
+        print(f"  Track name: {track_name}")
+        
+        # 3. Load audio with librosa
+        print(f"\n[3/6] Loading audio with librosa...")
+        notify_progress(user_id, 40, "Loading and analyzing audio...")
+        audio, original_sr = librosa.load(local_audio_path)
+        print(f"  Duration: {len(audio) / original_sr:.2f}s, Sample rate: {original_sr}")
+        
+        # 4. Extract tempo
+        print(f"\n[4/6] Extracting tempo...")
+        notify_progress(user_id, 50, "Extracting tempo...")
+        tempo = extract_tempo(audio, original_sr)
+        print(f"  Tempo: {tempo:.2f} BPM")
+
+        # 5. Run Inference Pipeline
+        print(f"\n[5/6] Running inference pipeline...")
+        notify_progress(user_id, 60, "Processing audio with AI models...")
+        
+        # Step 1: Generate CQT segments
+        print("  - Generating CQT segments...")
+        process_cqt(
+            audio=audio,
+            tempo=tempo,
+            original_sr=original_sr,
+            track_name=track_name,
+            split_unit_in_bars=SPLIT_UNIT_IN_BARS,
+            split_hop_bar_len=SPLIT_HOP_BAR_LEN,
+            hparams=CQT_HPARAMS,
+            output_dir=OUTPUT_DIR,
+        )
+        
+        # Step 2: Predict Notes
+        print("  - Predicting notes...")
+        predict_notes(
+            audio_file_path=local_audio_path,
+            model_path=NOTE_MODEL_CHECKPOINT,
+            tempo=tempo,
+            output_dir=OUTPUT_DIR,
+        )
+
+        # Step 3: Frame Attributes
+        print("  - Generating frame-level attributes...")
+        generate_frame_level_attributes(
+            audio=audio,
+            tempo=tempo,
+            original_sr=original_sr,
+            track_name=track_name,
+            split_unit_in_bars=SPLIT_UNIT_IN_BARS,
+            split_hop_bar_len=SPLIT_HOP_BAR_LEN,
+            hparams=CQT_HPARAMS,
+            output_dir=OUTPUT_DIR,
+            prediction_dir=NOTE_PREDICTION_DIR,
+        )
+
+        # Step 4: Predict Techniques
+        print("  - Predicting techniques...")
+        predict_techniques(
+            audio_file_path=local_audio_path,
+            model_path=TECH_MODEL_CHECKPOINT,
+            output_dir=OUTPUT_DIR,
+        )
+
+        # 6. Upload Results to S3
+        print(f"\n[6/6] Uploading results to S3...")
+        notify_progress(user_id, 90, "Uploading generated files...")
+        output_prefix = f"inference_results/{task_id}" if task_id else "inference_results"
+        uploaded_files = _upload_results_to_s3(bucket, output_prefix, track_name)
+
+        # Write completion marker
+        result = {
+            "status": "success",
+            "track": track_name,
+            "tempo": float(tempo),
+            "files": uploaded_files
+        }
+        
+        result_key = f"{output_prefix}/{track_name}/_result.json"
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=result_key,
+            Body=json.dumps(result, indent=2),
+            ContentType="application/json"
+        )
+        
+        # Generate presigned URL for the result
+        result_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': result_key},
+            ExpiresIn=3600  # 1 hour
+        )
+        
+        print(f"\n✅ Inference complete! Result: s3://{bucket}/{result_key}")
+        
+        # Send completion notification
+        notify_complete(user_id, result_url, track_name)
+        
+        return result
+    
     except Exception as e:
-        print(f"  ERROR: Could not download audio: {e}")
-        sys.exit(1)
-    
-    track_name = os.path.splitext(os.path.basename(local_audio_path))[0]
-    print(f"  Track name: {track_name}")
-    
-    print(f"\n[3/6] Loading audio with librosa...")
-    audio, original_sr = librosa.load(local_audio_path)
-    print(f"  Duration: {len(audio) / original_sr:.2f}s, Sample rate: {original_sr}")
-    
-    # 3. Extract tempo
-    print(f"\n[4/6] Extracting tempo...")
-    tempo = extract_tempo(audio, original_sr)
-    print(f"  Tempo: {tempo:.2f} BPM")
-
-    # 4. Run Inference Pipeline
-    print(f"\n[5/6] Running inference pipeline...")
-    
-    # Step 1: Generate CQT segments
-    print("  - Generating CQT segments...")
-    process_cqt(
-        audio=audio,
-        tempo=tempo,
-        original_sr=original_sr,
-        track_name=track_name,
-        split_unit_in_bars=SPLIT_UNIT_IN_BARS,
-        split_hop_bar_len=SPLIT_HOP_BAR_LEN,
-        hparams=CQT_HPARAMS,
-        output_dir=OUTPUT_DIR,
-    )
-    
-    # Step 2: Predict Notes
-    print("  - Predicting notes...")
-    predict_notes(
-        audio_file_path=local_audio_path,
-        model_path=NOTE_MODEL_CHECKPOINT,
-        tempo=tempo,
-        output_dir=OUTPUT_DIR,
-    )
-
-    # Step 3: Frame Attributes
-    print("  - Generating frame-level attributes...")
-    generate_frame_level_attributes(
-        audio=audio,
-        tempo=tempo,
-        original_sr=original_sr,
-        track_name=track_name,
-        split_unit_in_bars=SPLIT_UNIT_IN_BARS,
-        split_hop_bar_len=SPLIT_HOP_BAR_LEN,
-        hparams=CQT_HPARAMS,
-        output_dir=OUTPUT_DIR,
-        prediction_dir=NOTE_PREDICTION_DIR,
-    )
-
-    # Step 4: Predict Techniques
-    print("  - Predicting techniques...")
-    predict_techniques(
-        audio_file_path=local_audio_path,
-        model_path=TECH_MODEL_CHECKPOINT,
-        output_dir=OUTPUT_DIR,
-    )
-
-    # 5. Upload Results to S3
-    print(f"\n[6/6] Uploading results to S3...")
-    output_prefix = f"inference_results/{task_id}" if task_id else "inference_results"
-    uploaded_files = _upload_results_to_s3(bucket, output_prefix, track_name)
-
-    # Write completion marker
-    result = {
-        "status": "success",
-        "track": track_name,
-        "tempo": float(tempo),
-        "files": uploaded_files
-    }
-    
-    result_key = f"{output_prefix}/{track_name}/_result.json"
-    s3_client.put_object(
-        Bucket=bucket,
-        Key=result_key,
-        Body=json.dumps(result, indent=2),
-        ContentType="application/json"
-    )
-    print(f"\n✅ Inference complete! Result: s3://{bucket}/{result_key}")
-    
-    return result
+        error_msg = f"Inference failed: {str(e)}"
+        print(f"\n❌ {error_msg}")
+        import traceback
+        traceback.print_exc()
+        notify_error(user_id, error_msg)
+        raise
 
 
 if __name__ == "__main__":
@@ -194,6 +304,7 @@ if __name__ == "__main__":
     bucket = os.environ.get("BUCKET") or os.environ.get("S3_BUCKET_NAME")
     audio_key = os.environ.get("AUDIO_KEY")
     task_id = os.environ.get("TASK_ID", "default")
+    user_id = os.environ.get("USER_ID", "anonymous")
     
     if not bucket or not audio_key:
         print("ERROR: Missing required environment variables: BUCKET, AUDIO_KEY")
@@ -202,9 +313,11 @@ if __name__ == "__main__":
         sys.exit(1)
     
     try:
-        run_inference(bucket, audio_key, task_id)
+        run_inference(bucket, audio_key, task_id, user_id)
     except Exception as e:
-        print(f"\n❌ Inference failed: {e}")
+        error_msg = f"Inference failed: {str(e)}"
+        print(f"\n❌ {error_msg}")
         import traceback
         traceback.print_exc()
+        notify_error(user_id, error_msg)
         sys.exit(1)
