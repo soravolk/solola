@@ -14,6 +14,22 @@ export const FileUpload = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationStatus, setGenerationStatus] = useState<string>("");
   const [generationProgress, setGenerationProgress] = useState<number>(0);
+  const [xmlContent, setXmlContent] = useState<string | null>(null);
+
+  // Helper function to fetch and store XML content
+  const fetchXmlContent = async (url: string) => {
+    try {
+      console.log(`Fetching XML from: ${url}`);
+      const response = await fetch(url);
+      const xmlText = await response.text();
+      setXmlContent(xmlText);
+      console.log(`✓ XML content loaded (${xmlText.length} bytes)`);
+      return xmlText;
+    } catch (error) {
+      console.error(`Failed to fetch XML:`, error);
+      return null;
+    }
+  };
 
   // Generate or retrieve userId
   const userId = useMemo(() => {
@@ -61,15 +77,21 @@ export const FileUpload = () => {
           );
           break;
         case "transcription_progress":
-          setGenerationProgress(lastMessage.progress || 0);
-          setGenerationStatus(lastMessage.message || "Processing...");
+          setGenerationProgress(lastMessage.data?.progress || 0);
+          setGenerationStatus(lastMessage.data?.message || "Processing...");
           break;
         case "transcription_complete":
           setGenerationStatus("Complete!");
           setGenerationProgress(100);
           setIsGenerating(false);
+
+          // Fetch XML content silently in the background
+          if (lastMessage.data?.xmlUrl) {
+            void fetchXmlContent(lastMessage.data.xmlUrl);
+          }
+
           alert(
-            `✓ Transcription complete!\n${JSON.stringify(lastMessage.result, null, 2)}`,
+            `✓ Transcription complete!\nFile: ${lastMessage.data?.fileName || "Unknown"}\n${lastMessage.data?.xmlUrl ? "MusicXML ready for visualization!" : ""}`,
           );
           break;
         case "error":
