@@ -23,6 +23,9 @@ from inference import (
     predict_techniques,
     process_cqt,
 )
+from create_xml import preprocess_input, process_tied_notes, create_musicxml
+import xml.etree.ElementTree as ET
+import ast
 
 s3_client = boto3.client("s3")
 lambda_client = boto3.client("lambda")
@@ -50,6 +53,7 @@ WORK_DIR = "/tmp"
 DATA_DIR = os.path.join(WORK_DIR, "data")
 OUTPUT_DIR = os.path.join(WORK_DIR, "output")
 NOTE_PREDICTION_DIR = os.path.join(OUTPUT_DIR, "note_prediction")
+PREDICTION_XML_DIR = os.path.join(OUTPUT_DIR, "prediction_xml")
 
 
 # === Notification Functions ===
@@ -144,6 +148,7 @@ def _safe_mkdirs():
     os.makedirs(os.path.join(OUTPUT_DIR, "frame_level_full_tech_prediction"), exist_ok=True)
     os.makedirs(os.path.join(OUTPUT_DIR, "full_tech_prediction"), exist_ok=True)
     os.makedirs(NOTE_PREDICTION_DIR, exist_ok=True)
+    os.makedirs(PREDICTION_XML_DIR, exist_ok=True)
 
 
 def _upload_results_to_s3(bucket, prefix, track_name):
@@ -161,6 +166,60 @@ def _upload_results_to_s3(bucket, prefix, track_name):
     return uploaded_files
 
 
+def _generate_musicxml(track_name, output_dir):
+    """Generate MusicXML file from the predicted notes."""
+    try:
+        # Find the concatenated prediction file (without "segment" in filename)
+        tech_prediction_dir = os.path.join(output_dir, "full_tech_prediction")
+        
+        prediction_file = None
+        for f in os.listdir(tech_prediction_dir):
+            if f.endswith('.tsv') and track_name in f and 'segment' not in f.lower():
+                prediction_file = os.path.join(tech_prediction_dir, f)
+                break
+        
+        if not prediction_file:
+            print(f"  ⚠️ No concatenated prediction file found for {track_name}")
+            return None
+        
+        print(f"  Reading predictions from: {os.path.basename(prediction_file)}")
+        
+        # Parse the prediction file
+        notes = []
+        with open(prediction_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    # Each line is like: [0, 6, 74, 3, 7, 19]
+                    note = ast.literal_eval(line)
+                    notes.append(note)
+        
+        print(f"  Loaded {len(notes)} notes")
+        
+        # Process notes
+        preprocessed = preprocess_input(notes)
+        output_notes = process_tied_notes(preprocessed)
+        print(f"  Processed into {len(output_notes)} output notes")
+        
+        # Create MusicXML
+        tree = create_musicxml(output_notes)
+        ET.indent(tree, space="  ", level=0)
+        
+        # Save to file in prediction_xml directory
+        xml_filename = f"{track_name}.xml"
+        xml_path = os.path.join(PREDICTION_XML_DIR, xml_filename)
+        tree.write(xml_path, encoding='utf-8', xml_declaration=True)
+        
+        print(f"  ✅ MusicXML saved: prediction_xml/{xml_filename}")
+        return xml_path
+        
+    except Exception as e:
+        print(f"  ❌ Error generating MusicXML: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str = None):
     """Run the full inference pipeline with WebSocket notifications."""
     print(f"=" * 60)
@@ -174,13 +233,13 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
     
     try:
         # 1. Prepare environment
-        print("\n[1/6] Preparing environment...")
+        print("\n[1/7] Preparing environment...")
         notify_progress(user_id, 10, "Preparing environment...")
         _safe_mkdirs()
 
         # 2. Download Audio from S3
-        print(f"\n[2/6] Downloading audio from S3...")
-        notify_progress(user_id, 25, "Downloading audio file...")
+        print(f"\n[2/7] Downloading audio from S3...")
+        notify_progress(user_id, 20, "Downloading audio file...")
         local_audio_path = os.path.join(DATA_DIR, os.path.basename(audio_key))
         try:
             s3_client.download_file(bucket, audio_key, local_audio_path)
@@ -195,20 +254,20 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
         print(f"  Track name: {track_name}")
         
         # 3. Load audio with librosa
-        print(f"\n[3/6] Loading audio with librosa...")
-        notify_progress(user_id, 40, "Loading and analyzing audio...")
+        print(f"\n[3/7] Loading audio with librosa...")
+        notify_progress(user_id, 30, "Loading and analyzing audio...")
         audio, original_sr = librosa.load(local_audio_path)
         print(f"  Duration: {len(audio) / original_sr:.2f}s, Sample rate: {original_sr}")
         
         # 4. Extract tempo
-        print(f"\n[4/6] Extracting tempo...")
-        notify_progress(user_id, 50, "Extracting tempo...")
+        print(f"\n[4/7] Extracting tempo...")
+        notify_progress(user_id, 40, "Extracting tempo...")
         tempo = extract_tempo(audio, original_sr)
         print(f"  Tempo: {tempo:.2f} BPM")
 
         # 5. Run Inference Pipeline
-        print(f"\n[5/6] Running inference pipeline...")
-        notify_progress(user_id, 60, "Processing audio with AI models...")
+        print(f"\n[5/7] Running inference pipeline...")
+        notify_progress(user_id, 50, "Processing audio with AI models...")
         
         # Step 1: Generate CQT segments
         print("  - Generating CQT segments...")
@@ -254,13 +313,20 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
             output_dir=OUTPUT_DIR,
         )
 
+        # Step 5: Generate MusicXML
+        print("  - Generating MusicXML...")
+        notify_progress(user_id, 75, "Converting to MusicXML format...")
+        _generate_musicxml(track_name, OUTPUT_DIR)
+
         # 6. Upload Results to S3
-        print(f"\n[6/6] Uploading results to S3...")
-        notify_progress(user_id, 90, "Uploading generated files...")
+        print(f"\n[6/7] Uploading results to S3...")
+        notify_progress(user_id, 85, "Uploading generated files...")
         output_prefix = f"inference_results/{task_id}" if task_id else "inference_results"
         uploaded_files = _upload_results_to_s3(bucket, output_prefix, track_name)
 
-        # Write completion marker
+        # 7. Write completion marker
+        print(f"\n[7/7] Finalizing results...")
+        notify_progress(user_id, 95, "Finalizing results...")
         result = {
             "status": "success",
             "track": track_name,
