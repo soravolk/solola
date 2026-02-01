@@ -69,8 +69,10 @@ def notify_progress(user_id, progress, message):
         payload = {
             "userId": user_id,
             "type": "transcription_progress",
-            "progress": progress,
-            "message": message
+            "data": {
+                "progress": progress,
+                "message": message
+            }
         }
         lambda_client.invoke(
             FunctionName="eg-solo-websocket-notification",
@@ -89,21 +91,21 @@ def notify_complete(user_id, result_url, filename, xml_url=None):
         return
     
     try:
-        result_payload = {
+        result_data = {
             "resultUrl": result_url,
-            "fileName": filename
+            "fileName": filename,
+            "progress": 100,
+            "message": "Generation completed successfully!"
         }
         
         # Add XML download URL if available
         if xml_url:
-            result_payload["xmlUrl"] = xml_url
+            result_data["xmlUrl"] = xml_url
         
         payload = {
             "userId": user_id,
             "type": "transcription_complete",
-            "result": result_payload,
-            "progress": 100,
-            "message": "Generation completed successfully!"
+            "data": result_data
         }
         lambda_client.invoke(
             FunctionName="eg-solo-websocket-notification",
@@ -125,7 +127,9 @@ def notify_error(user_id, error_message):
         payload = {
             "userId": user_id,
             "type": "error",
-            "message": error_message
+            "data": {
+                "message": error_message
+            }
         }
         lambda_client.invoke(
             FunctionName="eg-solo-websocket-notification",
