@@ -82,20 +82,26 @@ def notify_progress(user_id, progress, message):
         print(f"[NOTIFY ERROR] Failed to send progress notification: {e}")
 
 
-def notify_complete(user_id, result_url, filename):
+def notify_complete(user_id, result_url, filename, xml_url=None):
     """Send completion notification to user via WebSocket notification Lambda."""
     if not user_id or user_id == "anonymous":
         print(f"[NOTIFY] Skipping completion notification (no userId)")
         return
     
     try:
+        result_payload = {
+            "resultUrl": result_url,
+            "fileName": filename
+        }
+        
+        # Add XML download URL if available
+        if xml_url:
+            result_payload["xmlUrl"] = xml_url
+        
         payload = {
             "userId": user_id,
             "type": "transcription_complete",
-            "result": {
-                "resultUrl": result_url,
-                "fileName": filename
-            },
+            "result": result_payload,
             "progress": 100,
             "message": "Generation completed successfully!"
         }
@@ -211,7 +217,7 @@ def _generate_musicxml(track_name, output_dir):
         tree.write(xml_path, encoding='utf-8', xml_declaration=True)
         
         print(f"  ✅ MusicXML saved: prediction_xml/{xml_filename}")
-        return xml_path
+        return xml_filename  # Return filename for S3 key generation
         
     except Exception as e:
         print(f"  ❌ Error generating MusicXML: {e}")
@@ -316,7 +322,7 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
         # Step 5: Generate MusicXML
         print("  - Generating MusicXML...")
         notify_progress(user_id, 75, "Converting to MusicXML format...")
-        _generate_musicxml(track_name, OUTPUT_DIR)
+        xml_filename = _generate_musicxml(track_name, OUTPUT_DIR)
 
         # 6. Upload Results to S3
         print(f"\n[6/7] Uploading results to S3...")
@@ -342,17 +348,28 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
             ContentType="application/json"
         )
         
-        # Generate presigned URL for the result
+        # Generate presigned URL for the result JSON
         result_url = s3_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': bucket, 'Key': result_key},
             ExpiresIn=3600  # 1 hour
         )
         
+        # Generate presigned URL for the XML file if it was created
+        xml_url = None
+        if xml_filename:
+            xml_s3_key = f"{output_prefix}/{track_name}/prediction_xml/{xml_filename}"
+            xml_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket, 'Key': xml_s3_key},
+                ExpiresIn=3600  # 1 hour
+            )
+            print(f"  MusicXML download URL generated")
+        
         print(f"\n✅ Inference complete! Result: s3://{bucket}/{result_key}")
         
-        # Send completion notification
-        notify_complete(user_id, result_url, track_name)
+        # Send completion notification with XML URL
+        notify_complete(user_id, result_url, track_name, xml_url)
         
         return result
     
