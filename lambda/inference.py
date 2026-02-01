@@ -430,6 +430,7 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
     track_name = os.path.splitext(os.path.basename(audio_file_path))[0]
     cqt_dir = os.path.join(output_dir, "cqt")
     pred_dir = os.path.join(output_dir, "note_prediction")
+    tech_prediction_dir = os.path.join(output_dir, "full_tech_prediction")
     frame_level_dir = os.path.join(output_dir, "frame_level_note_attrib")
     if not os.path.isdir(cqt_dir):
         raise FileNotFoundError(f"CQT directory not found: {cqt_dir}")
@@ -491,8 +492,8 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
     _, _, final_tech_preds, frame_level_final_tech_preds = model.model_inference(padded_cqt, cqt_lens, frame_level_note_attribs, note_attribs)
 
     # Ensure output dirs exist
-    os.makedirs("./output/full_tech_prediction", exist_ok=True)
-    os.makedirs("./output/frame_level_full_tech_prediction", exist_ok=True)
+    os.makedirs(tech_prediction_dir, exist_ok=True)
+    os.makedirs(frame_level_dir, exist_ok=True)
 
     all_note_level: list[int] = []
     all_frame_level: list[int] = []
@@ -528,10 +529,10 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
         ]
 
         # Save per-segment outputs (TSV)
-        seg_note_tsv = os.path.join("./output/full_tech_prediction", f"{track_name}_note_level_final_tech_full_prediction_segment_{i:02d}.tsv")
+        seg_note_tsv = os.path.join(tech_prediction_dir, f"{track_name}_note_level_final_tech_full_prediction_segment_{i:02d}.tsv")
         _write_tsv(seg_note_tsv, final_tech_prediction_note_level)
 
-        seg_frame_tsv = os.path.join("./output/frame_level_full_tech_prediction", f"{track_name}_frame_level_final_tech_prediction_segment_{i:02d}.tsv")
+        seg_frame_tsv = os.path.join(frame_level_dir, f"{track_name}_frame_level_final_tech_prediction_segment_{i:02d}.tsv")
         _write_tsv(seg_frame_tsv, frame_level_full_attribs)
 
         # Accumulate for concatenated outputs
@@ -540,13 +541,13 @@ def predict_techniques(audio_file_path: str, model_path: str, output_dir: str) -
 
     # Save concatenated outputs (TSV)
     concat_note_tsv = os.path.join(
-        "./output/full_tech_prediction",
+        tech_prediction_dir,
         f"{track_name}_note_level_final_tech_full_prediction.tsv",
     )
     _write_tsv(concat_note_tsv, all_note_level)
 
     concat_frame_tsv = os.path.join(
-        "./output/frame_level_full_tech_prediction",
+        frame_level_dir,
         f"{track_name}_frame_level_final_tech_prediction.tsv",
     )
     _write_tsv(concat_frame_tsv, all_frame_level)
