@@ -250,11 +250,6 @@ def apply_technique(technique_id, pitch, notations, technical, note, next_techni
 def create_musicxml(notes):
     root = ET.Element('score-partwise', version='2.0')
 
-    # Part-list and score-part details
-    part_list = ET.SubElement(root, 'part-list')
-    score_part = ET.SubElement(part_list, 'score-part', id="P1")
-    ET.SubElement(score_part, 'part-name').text = 'Guitar'
-
     identification = ET.SubElement(root, 'identification')
     encoding = ET.SubElement(identification, 'encoding')
     ET.SubElement(encoding, 'encoding-date').text = '2024-09-25'
@@ -270,7 +265,7 @@ def create_musicxml(notes):
     ET.SubElement(page_layout, 'page-height').text = '1850'
     ET.SubElement(page_layout, 'page-width').text = '1310'
 
-    # Part-list
+    # Part-list (only once)
     part_list = ET.SubElement(root, 'part-list')
     score_part = ET.SubElement(part_list, 'score-part', id="P1")
     ET.SubElement(score_part, 'part-name').text = 'Electric Guitar (Distortion)'
