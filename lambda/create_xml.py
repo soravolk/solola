@@ -296,15 +296,30 @@ def create_musicxml(notes):
     ET.SubElement(time, 'beats').text = '4'
     ET.SubElement(time, 'beat-type').text = '4'
     
-    # Clefs and staff details
-    ET.SubElement(attributes, 'staves').text = '2'
-    clef1 = ET.SubElement(attributes, 'clef', number="1")
-    ET.SubElement(clef1, 'sign').text = 'G'
-    ET.SubElement(clef1, 'line').text = '2'
+    # Single staff with TAB clef for guitar tablature
+    ET.SubElement(attributes, 'staves').text = '1'
     
-    clef2 = ET.SubElement(attributes, 'clef', number="2")
-    ET.SubElement(clef2, 'sign').text = 'TAB'
-    ET.SubElement(clef2, 'line').text = '5'
+    clef = ET.SubElement(attributes, 'clef', number="1")
+    ET.SubElement(clef, 'sign').text = 'TAB'
+    ET.SubElement(clef, 'line').text = '5'
+    
+    # Staff details with guitar tuning (standard tuning E-A-D-G-B-E)
+    staff_details = ET.SubElement(attributes, 'staff-details')
+    ET.SubElement(staff_details, 'staff-lines').text = '6'
+    
+    # Standard guitar tuning (from string 1 to 6: E4, B3, G3, D3, A2, E2)
+    tuning_pitches = [
+        ('E', 4),  # String 1 (high E)
+        ('B', 3),  # String 2
+        ('G', 3),  # String 3
+        ('D', 3),  # String 4
+        ('A', 2),  # String 5
+        ('E', 2),  # String 6 (low E)
+    ]
+    for string_num, (step, octave) in enumerate(tuning_pitches, 1):
+        staff_tuning = ET.SubElement(staff_details, 'staff-tuning', line=str(string_num))
+        ET.SubElement(staff_tuning, 'tuning-step').text = step
+        ET.SubElement(staff_tuning, 'tuning-octave').text = str(octave)
 
     current_measure_number = 1
     #current_measure = None
