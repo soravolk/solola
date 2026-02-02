@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AlphaTabApi as AlphaTabApiType } from "@coderline/alphatab";
+import "./GuitarTabViewer.css";
 
 interface GuitarTabViewerProps {
   xmlContent: string;
@@ -8,23 +9,44 @@ interface GuitarTabViewerProps {
 export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
   xmlContent,
 }) => {
-  const alphaTabRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<AlphaTabApiType | null>(null);
-  const [error, setError] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
+  const [playerReady, setPlayerReady] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [songTitle, setSongTitle] = useState("");
+  const [songArtist, setSongArtist] = useState("");
+  const [currentTime, setCurrentTime] = useState("00:00");
+  const [endTime, setEndTime] = useState("00:00");
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [zoom, setZoom] = useState(100);
+  const [layout, setLayout] = useState<"page" | "horizontal">("page");
+  const [showXml, setShowXml] = useState(false);
+
+  const formatDuration = (milliseconds: number) => {
+    let seconds = milliseconds / 1000;
+    const minutes = (seconds / 60) | 0;
+    seconds = (seconds - minutes * 60) | 0;
+    return (
+      String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+    );
+  };
 
   useEffect(() => {
-    if (!alphaTabRef.current || !xmlContent) return;
+    if (!mainRef.current || !xmlContent || !viewportRef.current) return;
 
     let cleanup: (() => void) | undefined;
 
     const initAlphaTab = async () => {
       try {
-        const { AlphaTabApi, Settings } = await import("@coderline/alphatab");
+        const alphaTab = await import("@coderline/alphatab");
+        const { AlphaTabApi, Settings, LayoutMode } = alphaTab;
 
-        if (!alphaTabRef.current) return;
+        if (!mainRef.current || !viewportRef.current) return;
 
-        // Destroy previous instance if exists
         if (apiRef.current) {
           apiRef.current.destroy();
           apiRef.current = null;
@@ -33,39 +55,53 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         const settings = new Settings();
         settings.core.fontDirectory = "/font/";
         settings.core.engine = "html5";
-        settings.core.logLevel = 1; // Enable debug logging
-        settings.player.enablePlayer = false; // Disable player for now to simplify
+        settings.core.logLevel = 1;
 
-        const api = new AlphaTabApi(alphaTabRef.current, settings);
+        settings.player.enablePlayer = true;
+        settings.player.enableCursor = true;
+        settings.player.enableUserInteraction = true;
+        settings.player.soundFont =
+          "https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/soundfont/sonivox.sf2";
+        settings.player.scrollElement = viewportRef.current;
+
+        settings.display.layoutMode = LayoutMode.Page;
+
+        const api = new AlphaTabApi(mainRef.current, settings);
         apiRef.current = api;
 
-        // Add error handler
-        api.error.on((e) => {
-          console.error("AlphaTab error:", e);
-          setError(
-            `Failed to render guitar tab: ${e.message || "Unknown error"}`,
-          );
-          setIsLoading(false);
-        });
-
         api.renderStarted.on(() => {
-          console.log("AlphaTab rendering started");
           setIsLoading(true);
         });
 
         api.renderFinished.on(() => {
-          console.log("✓ AlphaTab rendering finished");
           setIsLoading(false);
         });
 
-        // Convert XML string to ArrayBuffer and load it
+        api.scoreLoaded.on((score) => {
+          setSongTitle(score.title || "Guitar Tab");
+          setSongArtist(score.artist || "");
+        });
+
+        api.soundFontLoad.on((e) => {
+          const percentage = Math.floor((e.loaded / e.total) * 100);
+          setLoadingProgress(percentage);
+        });
+
+        api.playerReady.on(() => {
+          setPlayerReady(true);
+        });
+
+        api.playerStateChanged.on((e) => {
+          setIsPlaying(e.state === 1);
+        });
+
+        api.playerPositionChanged.on((e) => {
+          setCurrentTime(formatDuration(e.currentTime));
+          setEndTime(formatDuration(e.endTime));
+        });
+
         const encoder = new TextEncoder();
         const data = encoder.encode(xmlContent);
-
-        console.log("Loading MusicXML content into AlphaTab...");
-        console.log("XML preview:", xmlContent.substring(0, 500));
-
-        // Use the load method with the raw data
         api.load(data.buffer as ArrayBuffer);
 
         cleanup = () => {
@@ -76,7 +112,6 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         };
       } catch (err) {
         console.error("Failed to initialize AlphaTab:", err);
-        setError("Failed to load guitar tab viewer");
         setIsLoading(false);
       }
     };
@@ -88,48 +123,155 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
     };
   }, [xmlContent]);
 
+  const playPause = () => {
+    if (apiRef.current && playerReady) {
+      apiRef.current.playPause();
+    }
+  };
+
+  const stop = () => {
+    if (apiRef.current && playerReady) {
+      apiRef.current.stop();
+    }
+  };
+
+  const handleZoomChange = async (newZoom: number) => {
+    setZoom(newZoom);
+    if (apiRef.current) {
+      apiRef.current.settings.display.scale = newZoom / 100;
+      apiRef.current.updateSettings();
+      apiRef.current.render();
+    }
+  };
+
+  const handleLayoutChange = async (newLayout: "page" | "horizontal") => {
+    setLayout(newLayout);
+    if (apiRef.current) {
+      const alphaTab = await import("@coderline/alphatab");
+      apiRef.current.settings.display.layoutMode =
+        newLayout === "horizontal"
+          ? alphaTab.LayoutMode.Horizontal
+          : alphaTab.LayoutMode.Page;
+      apiRef.current.updateSettings();
+      apiRef.current.render();
+    }
+  };
+
+  const handlePrint = () => {
+    if (apiRef.current) {
+      apiRef.current.print();
+    }
+  };
+
   return (
-    <div
-      style={{
-        width: "100%",
-        backgroundColor: "#fff",
-        borderRadius: "8px",
-        padding: "1em",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-      }}
-    >
-      <h2 style={{ color: "#333", marginTop: 0 }}>Guitar Tab</h2>
-      {error && (
-        <div
-          style={{
-            padding: "1em",
-            backgroundColor: "#ffebee",
-            color: "#c62828",
-            borderRadius: "4px",
-            marginBottom: "1em",
-          }}
-        >
-          {error}
+    <div className="at-wrap" ref={wrapperRef}>
+      {isLoading && (
+        <div className="at-overlay">
+          <div className="at-overlay-content">Loading music sheet...</div>
         </div>
       )}
-      {isLoading && !error && (
-        <div
-          style={{
-            padding: "1em",
-            color: "#666",
-            textAlign: "center",
-          }}
-        >
-          Loading guitar tab...
+
+      <div className="at-content">
+        {!showXml ? (
+          <div className="at-viewport" ref={viewportRef}>
+            <div className="at-main" ref={mainRef}></div>
+          </div>
+        ) : (
+          <div className="at-xml-view">
+            <pre>{xmlContent}</pre>
+          </div>
+        )}
+      </div>
+
+      <div className="at-controls">
+        <div className="at-controls-left">
+          <button
+            className={
+              "at-btn at-player-stop" + (!playerReady ? " disabled" : "")
+            }
+            onClick={stop}
+            disabled={!playerReady}
+            title="Stop"
+          >
+            ⏹
+          </button>
+          <button
+            className={
+              "at-btn at-player-play-pause" + (!playerReady ? " disabled" : "")
+            }
+            onClick={playPause}
+            disabled={!playerReady}
+            title={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? "⏸" : "▶"}
+          </button>
+
+          {!playerReady && (
+            <span className="at-player-progress">{loadingProgress}%</span>
+          )}
+
+          <div className="at-song-info">
+            <span className="at-song-title">{songTitle}</span>
+            {songArtist && (
+              <span className="at-song-artist"> - {songArtist}</span>
+            )}
+          </div>
+
+          <div className="at-song-position">
+            {currentTime} / {endTime}
+          </div>
         </div>
-      )}
-      <div
-        ref={alphaTabRef}
-        style={{
-          minHeight: "400px",
-          width: "100%",
-        }}
-      />
+
+        <div className="at-controls-right">
+          <button
+            className={"at-btn" + (!showXml ? " active" : "")}
+            onClick={() => setShowXml(false)}
+            title="Tab View"
+          >
+            Tab
+          </button>
+          <button
+            className={"at-btn" + (showXml ? " active" : "")}
+            onClick={() => setShowXml(true)}
+            title="XML Source"
+          >
+            XML
+          </button>
+
+          <button className="at-btn" onClick={handlePrint} title="Print">
+            Print
+          </button>
+
+          <div className="at-zoom">
+            <select
+              value={zoom}
+              onChange={(e) => handleZoomChange(parseInt(e.target.value))}
+            >
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+              <option value="75">75%</option>
+              <option value="90">90%</option>
+              <option value="100">100%</option>
+              <option value="110">110%</option>
+              <option value="125">125%</option>
+              <option value="150">150%</option>
+              <option value="200">200%</option>
+            </select>
+          </div>
+
+          <div className="at-layout">
+            <select
+              value={layout}
+              onChange={(e) =>
+                handleLayoutChange(e.target.value as "page" | "horizontal")
+              }
+            >
+              <option value="page">Page</option>
+              <option value="horizontal">Horizontal</option>
+            </select>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
