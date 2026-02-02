@@ -6,7 +6,11 @@ interface GetUploadURLResponse {
   id: string;
 }
 
-export const FileUpload = () => {
+interface FileUploadProps {
+  onXmlReady?: (xmlContent: string) => void;
+}
+
+export const FileUpload: React.FC<FileUploadProps> = ({ onXmlReady }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
@@ -14,7 +18,6 @@ export const FileUpload = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationStatus, setGenerationStatus] = useState<string>("");
   const [generationProgress, setGenerationProgress] = useState<number>(0);
-  const [xmlContent, setXmlContent] = useState<string | null>(null);
 
   // Helper function to fetch and store XML content
   const fetchXmlContent = async (url: string) => {
@@ -22,7 +25,12 @@ export const FileUpload = () => {
       console.log(`Fetching XML from: ${url}`);
       const response = await fetch(url);
       const xmlText = await response.text();
-      setXmlContent(xmlText);
+
+      // Call the parent callback with XML content
+      if (onXmlReady) {
+        onXmlReady(xmlText);
+      }
+
       console.log(`✓ XML content loaded (${xmlText.length} bytes)`);
       return xmlText;
     } catch (error) {

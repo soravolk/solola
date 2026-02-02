@@ -1,5 +1,7 @@
 import "./App.css";
+import { useState } from "react";
 import { FileUpload } from "./components/fileUpload";
+import { GuitarTabViewer } from "./components/GuitarTabViewer";
 
 // Header component: displays the logos and the main title
 const Header: React.FC = () => {
@@ -27,6 +29,8 @@ const Header: React.FC = () => {
 
 // Content component: displays three parts for the audio upload process
 const Content = () => {
+  const [xmlContent, setXmlContent] = useState<string | null>(null);
+
   return (
     <main
       style={{
@@ -35,6 +39,8 @@ const Content = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        flexDirection: "column",
+        gap: "20px",
       }}
     >
       <div
@@ -72,8 +78,15 @@ const Content = () => {
         </section>
         <span style={{ padding: "0.5em" }}>or</span>
         {/* Part 3: Drop zone for the audio file */}
-        <FileUpload />
+        <FileUpload onXmlReady={setXmlContent} />
       </div>
+
+      {/* Show guitar tab viewer when XML is ready */}
+      {xmlContent && (
+        <div style={{ width: "80%" }}>
+          <GuitarTabViewer xmlContent={xmlContent} />
+        </div>
+      )}
     </main>
   );
 };
