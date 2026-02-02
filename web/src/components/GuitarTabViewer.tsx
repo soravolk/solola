@@ -43,7 +43,7 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
     const initAlphaTab = async () => {
       try {
         const alphaTab = await import("@coderline/alphatab");
-        const { AlphaTabApi, Settings, LayoutMode } = alphaTab;
+        const { AlphaTabApi, Settings, LayoutMode, StaveProfile } = alphaTab;
 
         if (!mainRef.current || !viewportRef.current) return;
 
@@ -65,6 +65,7 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         settings.player.scrollElement = viewportRef.current;
 
         settings.display.layoutMode = LayoutMode.Page;
+        // settings.display.staveProfile = StaveProfile.Tab; // Show guitar tablature only
 
         const api = new AlphaTabApi(mainRef.current, settings);
         apiRef.current = api;

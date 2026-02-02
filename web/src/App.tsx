@@ -43,47 +43,46 @@ const Content = () => {
         gap: "20px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          width: "80%",
-          backgroundColor: "rgba(255, 255, 255, 0.1)",
-          borderRadius: "12px",
-          padding: "2em",
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-          textAlign: "center",
-        }}
-      >
-        {/* Part 1: Instruction for uploading audio */}
-        <section style={{ marginBottom: "1em" }}>
-          <p style={{ fontSize: "18px", margin: 0 }}>
-            Please enter youtube link or upload your audio file.
-          </p>
-        </section>
-        {/* Part 2: Search box for YouTube link */}
-        <section style={{ width: "100%" }}>
-          <input
-            type="text"
-            placeholder="Enter YouTube link"
-            style={{
-              width: "50%",
-              padding: "0.6em",
-              borderRadius: "4px",
-              border: "1px solid #ccc",
-              fontSize: "16px",
-            }}
-          />
-        </section>
-        <span style={{ padding: "0.5em" }}>or</span>
-        {/* Part 3: Drop zone for the audio file */}
-        <FileUpload onXmlReady={setXmlContent} />
-      </div>
-
-      {/* Show guitar tab viewer when XML is ready */}
-      {xmlContent && (
-        <div style={{ width: "80%" }}>
+      {!xmlContent ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            width: "80%",
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
+            borderRadius: "12px",
+            padding: "2em",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+            textAlign: "center",
+          }}
+        >
+          {/* Part 1: Instruction for uploading audio */}
+          <section style={{ marginBottom: "1em" }}>
+            <p style={{ fontSize: "18px", margin: 0 }}>
+              Please enter youtube link or upload your audio file.
+            </p>
+          </section>
+          {/* Part 2: Search box for YouTube link */}
+          <section style={{ width: "100%" }}>
+            <input
+              type="text"
+              placeholder="Enter YouTube link"
+              style={{
+                width: "50%",
+                padding: "0.6em",
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+                fontSize: "16px",
+              }}
+            />
+          </section>
+          <span style={{ padding: "0.5em" }}>or</span>
+          {/* Part 3: Drop zone for the audio file */}
+          <FileUpload onXmlReady={setXmlContent} />
+        </div>
+      ) : (
+        <div style={{ width: "90%", height: "100%" }}>
           <GuitarTabViewer xmlContent={xmlContent} />
         </div>
       )}
