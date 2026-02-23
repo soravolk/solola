@@ -43,7 +43,7 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
     const initAlphaTab = async () => {
       try {
         const alphaTab = await import("@coderline/alphatab");
-        const { AlphaTabApi, Settings, LayoutMode, StaveProfile } = alphaTab;
+        const { AlphaTabApi, Settings, LayoutMode } = alphaTab;
 
         if (!mainRef.current || !viewportRef.current) return;
 
@@ -60,8 +60,7 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         settings.player.enablePlayer = true;
         settings.player.enableCursor = true;
         settings.player.enableUserInteraction = true;
-        settings.player.soundFont =
-          "https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/soundfont/sonivox.sf2";
+        settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.scrollElement = viewportRef.current;
 
         settings.display.layoutMode = LayoutMode.Page;
@@ -85,20 +84,27 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
 
         api.soundFontLoad.on((e) => {
           const percentage = Math.floor((e.loaded / e.total) * 100);
+          console.log(`Soundfont loading: ${percentage}%`);
           setLoadingProgress(percentage);
         });
 
         api.playerReady.on(() => {
+          console.log("✓ Player is ready!");
           setPlayerReady(true);
         });
 
         api.playerStateChanged.on((e) => {
+          console.log("Player state:", e.state);
           setIsPlaying(e.state === 1);
         });
 
         api.playerPositionChanged.on((e) => {
           setCurrentTime(formatDuration(e.currentTime));
           setEndTime(formatDuration(e.endTime));
+        });
+
+        api.error.on((e) => {
+          console.error("AlphaTab error:", e);
         });
 
         const encoder = new TextEncoder();
