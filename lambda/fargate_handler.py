@@ -42,7 +42,7 @@ CQT_HPARAMS = {
     "normalize_cqt": False,
 }
 SPLIT_UNIT_IN_BARS = 4
-SPLIT_HOP_BAR_LEN = 1
+SPLIT_HOP_BAR_LEN = 4
 
 # Paths
 SCRIPT_DIR = os.path.dirname(__file__)

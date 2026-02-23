@@ -571,7 +571,7 @@ if __name__ == "__main__":
         "normalize_cqt": False,
     }
     split_unit_in_bars = 4
-    split_hop_bar_len = 1
+    split_hop_bar_len = 4
     output_dir = "./output"
 
     print("="*60)
