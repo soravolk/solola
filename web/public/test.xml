@@ -22,8 +22,8 @@
       <part-abbreviation>dist.guit.</part-abbreviation>
       <midi-instrument id="P1">
         <midi-channel>1</midi-channel>
-        <midi-bank>1</midi-bank>
-        <midi-program>31</midi-program>
+        <midi-bank>0</midi-bank>
+        <midi-program>29</midi-program>
         <volume>100</volume>
         <pan>0</pan>
       </midi-instrument>

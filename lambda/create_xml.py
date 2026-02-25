@@ -268,13 +268,13 @@ def create_musicxml(notes):
     # Part-list (only once)
     part_list = ET.SubElement(root, 'part-list')
     score_part = ET.SubElement(part_list, 'score-part', id="P1")
-    ET.SubElement(score_part, 'part-name').text = 'Electric Guitar (Distortion)'
-    ET.SubElement(score_part, 'part-abbreviation').text = 'dist.guit.'
+    ET.SubElement(score_part, 'part-name').text = 'Overdriven Guitar'
+    ET.SubElement(score_part, 'part-abbreviation').text = 'guit.'
     midi_instrument = ET.SubElement(score_part, 'midi-instrument', id="P1")
     ET.SubElement(midi_instrument, 'midi-channel').text = '1'
-    ET.SubElement(midi_instrument, 'midi-bank').text = '1'
-    ET.SubElement(midi_instrument, 'midi-program').text = '31'
-    ET.SubElement(midi_instrument, 'volume').text = '100'
+    ET.SubElement(midi_instrument, 'midi-bank').text = '0'
+    ET.SubElement(midi_instrument, 'midi-program').text = '29'
+    ET.SubElement(midi_instrument, 'volume').text = '80'
     ET.SubElement(midi_instrument, 'pan').text = '0'
     
     # Part section
