@@ -11,7 +11,6 @@ RUN yum -y install \
     pkg-config \
     hdf5-devel \
     libffi-devel \
-    openssl-devel \
     libsndfile \
     tar xz \
  && ln -sf /usr/bin/cmake3 /usr/bin/cmake \
