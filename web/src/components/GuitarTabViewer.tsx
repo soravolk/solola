@@ -64,7 +64,6 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         settings.player.scrollElement = viewportRef.current;
 
         settings.display.layoutMode = LayoutMode.Page;
-        // settings.display.staveProfile = StaveProfile.Tab; // Show guitar tablature only
 
         const api = new AlphaTabApi(mainRef.current, settings);
         apiRef.current = api;

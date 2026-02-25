@@ -112,6 +112,67 @@ const Footer: React.FC = () => {
 };
 
 function App() {
+  const [testMode, setTestMode] = useState(false);
+  const [testXml, setTestXml] = useState<string | null>(null);
+
+  const loadTestXml = async () => {
+    try {
+      const response = await fetch("/test.xml");
+      const xml = await response.text();
+      setTestXml(xml);
+      setTestMode(true);
+    } catch (err) {
+      console.error("Failed to load test.xml:", err);
+    }
+  };
+
+  if (testMode && testXml) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          width: "100%",
+          background: "linear-gradient(135deg, #000428, #004e92)",
+          color: "#fff",
+        }}
+      >
+        <header
+          style={{
+            width: "100%",
+            backgroundColor: "#001f3f",
+            borderBottom: "1px solid #003366",
+            padding: "10px 20px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <h1 style={{ margin: 0, fontSize: "1.2rem" }}>
+            🎸 AlphaTab Test Page
+          </h1>
+          <button
+            onClick={() => setTestMode(false)}
+            style={{
+              padding: "8px 16px",
+              background: "#4fc3f7",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            ← Back to App
+          </button>
+        </header>
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <GuitarTabViewer xmlContent={testXml} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -119,13 +180,32 @@ function App() {
         flexDirection: "column",
         minHeight: "100vh",
         width: "100%",
-        background: "linear-gradient(135deg, #000428, #004e92)", // dark blue gradient background
+        background: "linear-gradient(135deg, #000428, #004e92)",
         color: "#fff",
       }}
     >
       <Header />
       <Content />
       <Footer />
+      {/* Test Mode Button */}
+      <button
+        onClick={loadTestXml}
+        style={{
+          position: "fixed",
+          bottom: "20px",
+          right: "20px",
+          padding: "10px 20px",
+          background: "#ff9800",
+          color: "#000",
+          border: "none",
+          borderRadius: "8px",
+          cursor: "pointer",
+          fontWeight: "bold",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+        }}
+      >
+        🧪 Test Tab Viewer
+      </button>
     </div>
   );
 }
