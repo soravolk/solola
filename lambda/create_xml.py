@@ -286,7 +286,7 @@ def create_musicxml(notes):
     
     # Attributes (key, time, staves, clef)
     attributes = ET.SubElement(current_measure, 'attributes')
-    ET.SubElement(attributes, 'divisions').text = '1'
+    ET.SubElement(attributes, 'divisions').text = '12'
     
     key = ET.SubElement(attributes, 'key')
     ET.SubElement(key, 'fifths').text = '0'
