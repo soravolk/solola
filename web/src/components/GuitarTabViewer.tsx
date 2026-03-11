@@ -79,6 +79,14 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         api.scoreLoaded.on((score) => {
           setSongTitle(score.title || "Guitar Tab");
           setSongArtist(score.artist || "");
+
+          // Enable both standard notation and tablature for all staves
+          for (const track of score.tracks) {
+            for (const staff of track.staves) {
+              staff.showStandardNotation = true;
+              staff.showTablature = true;
+            }
+          }
         });
 
         api.soundFontLoad.on((e) => {
