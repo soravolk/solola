@@ -1,16 +1,197 @@
+/* ══════════════════════════════════════════
+   GuitarTabViewer – Modern Floating Toolbar
+   ══════════════════════════════════════════ */
+
+/* ─── Collapsed Card ─── */
+.at-collapsed-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #1e1f30, #252740);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: #c8ccf0;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  font-family: inherit;
+}
+
+.at-collapsed-card:hover {
+  background: linear-gradient(135deg, #252740, #2d2f50);
+  border-color: rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.at-collapsed-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.at-collapsed-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.at-collapsed-sub {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.at-collapsed-chevron {
+  color: #666;
+}
+
+/* ─── Main Wrapper ─── */
 .at-wrap {
   width: 100%;
-  height: 80vh;
+  height: 70vh;
+  max-height: 600px;
   margin: 0 auto;
-  border: 1px solid rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
   background: #fff;
-  border-radius: 8px;
+  border-radius: 14px;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
+/* ─── Floating Toolbar ─── */
+.at-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(26, 27, 46, 0.96);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.at-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.at-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
+}
+
+/* ─── Icon Buttons ─── */
+.at-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.at-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e0e0e6;
+}
+
+.at-icon-btn.active {
+  background: rgba(102, 126, 234, 0.2);
+  color: #8b9cf7;
+}
+
+.at-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Play button accent */
+.at-play-btn:not(:disabled):hover {
+  background: rgba(102, 126, 234, 0.15);
+  color: #8b9cf7;
+}
+
+.at-play-btn.playing {
+  color: #8b9cf7;
+}
+
+/* ─── Toolbar labels ─── */
+.at-toolbar-loading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #888;
+  padding: 0 4px;
+}
+
+.at-toolbar-time {
+  font-size: 0.8rem;
+  font-family: "SF Mono", Monaco, Consolas, monospace;
+  color: #888;
+  padding: 0 6px;
+  min-width: 95px;
+  text-align: center;
+}
+
+.at-toolbar-song {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.at-toolbar-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #c8ccf0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.at-toolbar-artist {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+}
+
+.at-toolbar-zoom-label {
+  font-size: 0.75rem;
+  color: #888;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* ─── Spinner ─── */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.at-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ─── Content ─── */
 .at-content {
   position: relative;
   overflow: hidden;
@@ -20,176 +201,108 @@
 .at-viewport {
   overflow-y: auto;
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 20px;
+  inset: 0;
+  padding: 16px;
+}
+
+/* Custom scrollbar for viewport */
+.at-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+.at-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.at-viewport::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
 }
 
 .at-main {
-  /* AlphaTab renders content here */
   min-height: 100%;
 }
 
+/* ─── XML View ─── */
 .at-xml-view {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   overflow: auto;
-  padding: 20px;
-  background: #f5f5f5;
+  padding: 16px;
+  background: #1a1b2e;
 }
 
 .at-xml-view pre {
   margin: 0;
   font-size: 12px;
-  font-family: Monaco, Consolas, monospace;
+  font-family: "SF Mono", Monaco, Consolas, monospace;
   white-space: pre-wrap;
   word-wrap: break-word;
-  color: #333;
+  color: #c8ccf0;
+  line-height: 1.6;
 }
 
-/* Overlay */
+/* ─── Overlay ─── */
 .at-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1002;
-  backdrop-filter: blur(3px);
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .at-overlay-content {
-  margin-top: 20px;
-  background: #fff;
-  box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
-  padding: 20px 40px;
-  border-radius: 8px;
-  font-size: 16px;
-}
-
-/* Controls Footer */
-.at-controls {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: space-between;
-  background: #436d9d;
-  color: #fff;
-  padding: 8px 12px;
-}
-
-.at-controls > div {
-  display: flex;
-  justify-content: flex-start;
-  align-content: center;
-  align-items: center;
-  gap: 8px;
-}
-
-.at-btn {
-  display: flex;
-  text-align: center;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 8px 12px;
-  margin: 0;
-  background: transparent;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  transition: background 0.2s;
-}
-
-.at-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.at-btn.active {
-  background: #5588c7;
-}
-
-.at-btn.disabled {
-  cursor: progress;
-  opacity: 0.5;
-}
-
-.at-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.at-player-progress {
-  padding: 0 8px;
-  font-size: 14px;
-}
-
-.at-song-info {
-  padding: 0 12px;
-}
-
-.at-song-title {
-  font-weight: bold;
-}
-
-.at-song-artist {
-  opacity: 0.8;
-}
-
-.at-song-position {
-  padding: 0 12px;
-  font-family: monospace;
-}
-
-.at-zoom,
-.at-layout {
   display: flex;
   align-items: center;
+  gap: 10px;
+  background: #1e1f30;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  padding: 16px 28px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  color: #c8ccf0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.at-zoom select,
-.at-layout select {
-  -moz-appearance: none;
-  -webkit-appearance: none;
-  appearance: none;
-  border: none;
-  background: #5588c7;
-  padding: 8px 12px;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.at-zoom select:hover,
-.at-layout select:hover {
-  background: #6699d8;
-}
-
-/* Cursor styles */
+/* ─── AlphaTab Cursor Styles ─── */
 .at-cursor-bar {
-  background: rgba(255, 242, 0, 0.25);
+  background: rgba(255, 242, 0, 0.2);
 }
 
 .at-selection div {
-  background: rgba(64, 64, 255, 0.1);
+  background: rgba(102, 126, 234, 0.1);
 }
 
 .at-cursor-beat {
-  background: rgba(64, 64, 255, 0.75);
+  background: rgba(102, 126, 234, 0.75);
   width: 3px;
 }
 
 .at-highlight * {
-  fill: #0078ff;
-  stroke: #0078ff;
+  fill: #667eea;
+  stroke: #667eea;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .at-wrap {
+    height: 50vh;
+    max-height: none;
+    border-radius: 10px;
+  }
+
+  .at-toolbar {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .at-toolbar-song {
+    display: none;
+  }
+
+  .at-toolbar-zoom-label {
+    display: none;
+  }
 }

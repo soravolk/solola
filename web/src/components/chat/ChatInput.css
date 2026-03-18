@@ -1,0 +1,186 @@
+/* ─── Container ─── */
+.chat-input-container {
+  position: relative;
+  background: #1e1f2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 8px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.chat-input-container:focus-within {
+  border-color: rgba(102, 126, 234, 0.5);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.chat-input-container.drag-over {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.08);
+}
+
+/* ─── File Preview ─── */
+.chat-input-file-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.file-preview-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.file-preview-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.file-preview-name {
+  font-weight: 500;
+  color: #c8ccf0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-size {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.file-preview-remove {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+
+.file-preview-remove:hover {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+/* ─── Input Row ─── */
+.chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* ─── Attach Button ─── */
+.chat-input-attach {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: none;
+  color: #888;
+  cursor: pointer;
+  border-radius: 10px;
+  transition:
+    color 0.2s,
+    background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.chat-input-attach:hover {
+  color: #c8ccf0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-input-attach:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Textarea ─── */
+.chat-input-textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e0e0e6;
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: none;
+  padding: 8px 4px;
+  max-height: 150px;
+}
+
+.chat-input-textarea::placeholder {
+  color: #555;
+}
+
+.chat-input-textarea:disabled {
+  opacity: 0.5;
+}
+
+/* ─── Send Button ─── */
+.chat-input-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #555;
+  cursor: not-allowed;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.chat-input-send.active {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  cursor: pointer;
+}
+
+.chat-input-send.active:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
+}
+
+.chat-input-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ─── Drop Overlay ─── */
+.chat-input-drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(102, 126, 234, 0.15);
+  border-radius: 16px;
+  color: #667eea;
+  font-weight: 600;
+  font-size: 0.95rem;
+  pointer-events: none;
+}
