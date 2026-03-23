@@ -6,8 +6,10 @@ import boto3
 # Initialize AWS clients outside handler for connection reuse
 s3_client = boto3.client('s3')
 lambda_client = boto3.client('lambda')
+bedrock_client = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 BUCKET_NAME = os.environ.get('S3_BUCKET_NAME', 'solola-bucket')
 INFERENCE_LAMBDA_ARN = os.environ.get('INFERENCE_LAMBDA_ARN', '')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'openai.gpt-oss-20b-1:0')
 
 def generate_presigned_url(file_name: str, file_type: str) -> str:
     """Generate presigned URL for S3 upload"""
@@ -195,6 +197,72 @@ def lambda_handler(event, context):
                 'body': json.dumps({"error": f"Internal server error: {str(e)}"})
             }
     
+    # Route: POST /api/v1/fix - AI-powered MusicXML correction via Bedrock
+    if http_method == 'POST' and request_path == '/api/v1/fix':
+        print(">>> Matched /api/v1/fix route")
+        try:
+            body = json.loads(event.get('body', '{}'))
+            current_xml = body.get('currentXml', '')
+            instruction = body.get('instruction', '')
+
+            if not current_xml or not instruction:
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Missing currentXml or instruction'})
+                }
+
+            print(f"Fix request - instruction: {instruction[:100]}")
+
+            # Call Bedrock with the Converse API
+            response = bedrock_client.converse(
+                modelId=BEDROCK_MODEL_ID,
+                system=[{
+                    'text': (
+                        'You are a MusicXML editing assistant for guitar transcriptions. '
+                        'The user will give you a MusicXML document and a change request. '
+                        'Apply the requested changes accurately and return ONLY the complete '
+                        'corrected MusicXML document. No explanation, no markdown fences, '
+                        'no extra text — just the raw XML starting with <?xml.'
+                    )
+                }],
+                messages=[{
+                    'role': 'user',
+                    'content': [{
+                        'text': (
+                            f'Here is the current MusicXML:\n\n{current_xml}\n\n'
+                            f'Please make this change: {instruction}'
+                        )
+                    }]
+                }],
+                inferenceConfig={
+                    'temperature': 0,
+                    'maxTokens': 8192,
+                },
+            )
+
+            fixed_xml = response['output']['message']['content'][0]['text'].strip()
+
+            # Strip markdown fences if the model wraps them anyway
+            if fixed_xml.startswith('```'):
+                fixed_xml = fixed_xml.split('\n', 1)[1]  # remove first line
+                if fixed_xml.endswith('```'):
+                    fixed_xml = fixed_xml[:-3].rstrip()
+
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({'xmlContent': fixed_xml})
+            }
+
+        except Exception as e:
+            print(f"Error in /api/v1/fix: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': f'AI fix failed: {str(e)}'})
+            }
+
     # No route matched - return 404
     return {
         'statusCode': 404,

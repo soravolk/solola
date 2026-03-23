@@ -40,6 +40,7 @@ export const ChatInterface: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentAssistantMsgId = useRef<string | null>(null);
+  const latestXmlRef = useRef<string | null>(null);
 
   // userId
   const userId = useMemo(() => {
@@ -84,6 +85,7 @@ export const ChatInterface: React.FC = () => {
       try {
         const res = await fetch(url);
         const xml = await res.text();
+        latestXmlRef.current = xml;
         updateAssistantMessage({
           content:
             "Here's your guitar transcription! You can play it back, zoom, and switch layouts.",
@@ -243,6 +245,67 @@ export const ChatInterface: React.FC = () => {
     [userId, updateAssistantMessage],
   );
 
+  // AI-powered MusicXML fix via Bedrock
+  const handleAiFix = useCallback(
+    async (instruction: string) => {
+      if (!latestXmlRef.current) return;
+
+      try {
+        updateAssistantMessage({
+          status: "processing",
+          progress: 30,
+          statusText: "Sending fix request to AI...",
+        });
+
+        const fixUrl =
+          import.meta.env.VITE_FIX_API_URL ||
+          "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/fix";
+
+        const res = await fetch(fixUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentXml: latestXmlRef.current,
+            instruction,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || `Fix request failed: ${res.status}`);
+        }
+
+        updateAssistantMessage({
+          status: "processing",
+          progress: 80,
+          statusText: "Applying changes...",
+        });
+
+        const data = await res.json();
+        const fixedXml = data.xmlContent;
+
+        // Update the latest XML reference
+        latestXmlRef.current = fixedXml;
+
+        updateAssistantMessage({
+          content: `Updated the transcription: "${instruction}"`,
+          status: "complete",
+          progress: 100,
+          xmlContent: fixedXml,
+        });
+        setIsProcessing(false);
+      } catch (err: any) {
+        updateAssistantMessage({
+          content: "Sorry, the AI couldn't apply that fix.",
+          status: "error",
+          statusText: err?.message || "Fix request failed.",
+        });
+        setIsProcessing(false);
+      }
+    },
+    [updateAssistantMessage],
+  );
+
   // Handle user sending a message
   const handleSend = useCallback(
     (text: string, file?: File) => {
@@ -281,6 +344,9 @@ export const ChatInterface: React.FC = () => {
           status: "complete",
         });
         setIsProcessing(false);
+      } else if (latestXmlRef.current) {
+        // There's a previous transcription — use AI to fix/edit it
+        void handleAiFix(text);
       } else {
         // Text-only message
         updateAssistantMessage({
@@ -291,7 +357,7 @@ export const ChatInterface: React.FC = () => {
         setIsProcessing(false);
       }
     },
-    [handleUploadAndGenerate, updateAssistantMessage],
+    [handleUploadAndGenerate, handleAiFix, updateAssistantMessage],
   );
 
   const hasUserMessages = messages.some((m) => m.role === "user");

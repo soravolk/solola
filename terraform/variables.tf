@@ -68,7 +68,13 @@ variable "api_lambda_memory" {
 variable "cors_origins" {
   description = "Allowed CORS origins for API Gateway"
   type        = list(string)
-  default     = ["https://d2endw6x9lawf1.cloudfront.net"]
+  default     = ["https://d2endw6x9lawf1.cloudfront.net", "http://localhost:5173"]
+}
+
+variable "bedrock_model_id" {
+  description = "Bedrock model ID for AI-powered MusicXML correction"
+  type        = string
+  default     = "openai.gpt-oss-20b-1:0"
 }
 
 variable "subnet_ids" {

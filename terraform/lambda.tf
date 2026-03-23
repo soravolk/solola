@@ -62,6 +62,24 @@ resource "aws_iam_role_policy" "api_lambda_invoke" {
   })
 }
 
+# Bedrock permissions for AI-powered MusicXML correction
+resource "aws_iam_role_policy" "api_lambda_bedrock" {
+  name = "bedrock-invoke-model"
+  role = aws_iam_role.api_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "bedrock:InvokeModel",
+        "bedrock:Converse"
+      ]
+      Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.bedrock_model_id}"
+    }]
+  })
+}
+
 # Lambda Function
 resource "aws_lambda_function" "api_handler" {
   function_name = var.api_function_name
@@ -75,6 +93,7 @@ resource "aws_lambda_function" "api_handler" {
     variables = {
       S3_BUCKET_NAME       = var.s3_bucket_name
       INFERENCE_LAMBDA_ARN = aws_lambda_function.inference.arn
+      BEDROCK_MODEL_ID     = var.bedrock_model_id
     }
   }
 
