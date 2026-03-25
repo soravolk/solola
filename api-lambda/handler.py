@@ -2,14 +2,79 @@ import json
 import os
 import uuid
 import boto3
+from datetime import datetime, timedelta
 
 # Initialize AWS clients outside handler for connection reuse
 s3_client = boto3.client('s3')
 lambda_client = boto3.client('lambda')
 bedrock_client = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+dynamodb = boto3.resource('dynamodb')
+rate_limit_table = dynamodb.Table(os.environ.get('RATE_LIMIT_TABLE', 'solola-rate-limit'))
+
 BUCKET_NAME = os.environ.get('S3_BUCKET_NAME', 'solola-bucket')
 INFERENCE_LAMBDA_ARN = os.environ.get('INFERENCE_LAMBDA_ARN', '')
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'openai.gpt-oss-20b-1:0')
+
+# Rate limit config
+MAX_FIX_REQUESTS_PER_HOUR = int(os.environ.get('MAX_FIX_REQUESTS_PER_HOUR', '20'))
+MAX_FIX_REQUESTS_PER_DAY = int(os.environ.get('MAX_FIX_REQUESTS_PER_DAY', '100'))
+
+def check_rate_limit(identifier: str) -> dict:
+    """Check if IP/user has exceeded rate limits. Returns {'allowed': bool, 'error': str}"""
+    now = datetime.utcnow()
+    hour_key = now.strftime('%Y%m%d%H')
+    day_key = now.strftime('%Y%m%d')
+    
+    try:
+        response = rate_limit_table.get_item(Key={'user_id': identifier})
+        
+        if 'Item' not in response:
+            # First request from this identifier
+            rate_limit_table.put_item(Item={
+                'user_id': identifier,
+                'hourly': {hour_key: 1},
+                'daily': {day_key: 1},
+                'expires_at': int((now + timedelta(days=2)).timestamp())
+            })
+            return {'allowed': True}
+        
+        item = response['Item']
+        hourly = item.get('hourly', {})
+        daily = item.get('daily', {})
+        
+        hourly_count = hourly.get(hour_key, 0)
+        daily_count = daily.get(day_key, 0)
+        
+        # Check limits
+        if hourly_count >= MAX_FIX_REQUESTS_PER_HOUR:
+            return {
+                'allowed': False,
+                'error': f'Rate limit exceeded: {MAX_FIX_REQUESTS_PER_HOUR} requests per hour. Please try again later.'
+            }
+        
+        if daily_count >= MAX_FIX_REQUESTS_PER_DAY:
+            return {
+                'allowed': False,
+                'error': f'Rate limit exceeded: {MAX_FIX_REQUESTS_PER_DAY} requests per day. Please try again tomorrow.'
+            }
+        
+        # Update counts
+        hourly[hour_key] = hourly_count + 1
+        daily[day_key] = daily_count + 1
+        
+        rate_limit_table.put_item(Item={
+            'user_id': identifier,
+            'hourly': hourly,
+            'daily': daily,
+            'expires_at': int((now + timedelta(days=2)).timestamp())
+        })
+        
+        return {'allowed': True}
+        
+    except Exception as e:
+        print(f"Rate limit check error: {e}")
+        # Fail open - allow request if rate limit check fails
+        return {'allowed': True}
 
 def generate_presigned_url(file_name: str, file_type: str) -> str:
     """Generate presigned URL for S3 upload"""
@@ -204,6 +269,9 @@ def lambda_handler(event, context):
             body = json.loads(event.get('body', '{}'))
             current_xml = body.get('currentXml', '')
             instruction = body.get('instruction', '')
+            
+            # Extract source IP for rate limiting
+            source_ip = event.get('requestContext', {}).get('http', {}).get('sourceIp', 'unknown')
 
             if not current_xml or not instruction:
                 return {
@@ -212,7 +280,34 @@ def lambda_handler(event, context):
                     'body': json.dumps({'error': 'Missing currentXml or instruction'})
                 }
 
-            print(f"Fix request - instruction: {instruction[:100]}")
+            # Abuse protection: IP-based rate limiting
+            rate_check = check_rate_limit(source_ip)
+            if not rate_check['allowed']:
+                return {
+                    'statusCode': 429,
+                    'headers': headers,
+                    'body': json.dumps({'error': rate_check['error']})
+                }
+
+            # Abuse protection: size limits
+            MAX_XML_SIZE = 500_000  # 500KB
+            MAX_INSTRUCTION_SIZE = 1000  # 1000 chars
+            
+            if len(current_xml) > MAX_XML_SIZE:
+                return {
+                    'statusCode': 413,
+                    'headers': headers,
+                    'body': json.dumps({'error': f'XML too large (max {MAX_XML_SIZE} bytes)'})
+                }
+            
+            if len(instruction) > MAX_INSTRUCTION_SIZE:
+                return {
+                    'statusCode': 413,
+                    'headers': headers,
+                    'body': json.dumps({'error': f'Instruction too long (max {MAX_INSTRUCTION_SIZE} chars)'})
+                }
+
+            print(f"Fix request - IP: {source_ip}, instruction: {instruction[:100]}")
 
             # Call Bedrock with the Converse API
             response = bedrock_client.converse(

@@ -94,6 +94,9 @@ resource "aws_lambda_function" "api_handler" {
       S3_BUCKET_NAME       = var.s3_bucket_name
       INFERENCE_LAMBDA_ARN = aws_lambda_function.inference.arn
       BEDROCK_MODEL_ID     = var.bedrock_model_id
+      RATE_LIMIT_TABLE     = aws_dynamodb_table.rate_limit.name
+      MAX_FIX_REQUESTS_PER_HOUR = var.max_fix_requests_per_hour
+      MAX_FIX_REQUESTS_PER_DAY  = var.max_fix_requests_per_day
     }
   }
 
