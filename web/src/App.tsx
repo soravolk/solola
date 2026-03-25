@@ -1,7 +1,8 @@
 import "./App.css";
+import { ChatInterface } from "./components/chat/ChatInterface";
 
 function App() {
-  return <h1>Solola</h1>;
+  return <ChatInterface />;
 }
 
 export default App;
