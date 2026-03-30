@@ -9,6 +9,20 @@ import "./ChatInterface.css";
 const generateId = () =>
   `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+/** Strip reasoning/thinking blocks and extract only MusicXML from AI response */
+function sanitizeXml(raw: string): string {
+  // Remove <reasoning>, <think>, <thinking>, <scratchpad> blocks
+  let cleaned = raw.replace(
+    /<(reasoning|think|thinking|scratchpad)\b[^>]*>[\s\S]*?<\/\1>/gi,
+    "",
+  );
+  // Extract from <?xml or <score-partwise to </score-partwise>
+  const xmlMatch = cleaned.match(
+    /(<\?xml\b[\s\S]*<\/score-partwise>)|(<score-partwise\b[\s\S]*<\/score-partwise>)/,
+  );
+  return xmlMatch ? xmlMatch[0].trim() : cleaned.trim();
+}
+
 const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   role: "assistant",
@@ -84,7 +98,7 @@ export const ChatInterface: React.FC = () => {
     async (url: string) => {
       try {
         const res = await fetch(url);
-        const xml = await res.text();
+        const xml = sanitizeXml(await res.text());
         latestXmlRef.current = xml;
         updateAssistantMessage({
           content:
@@ -282,7 +296,7 @@ export const ChatInterface: React.FC = () => {
         });
 
         const data = await res.json();
-        const fixedXml = data.xmlContent;
+        const fixedXml = sanitizeXml(data.xmlContent);
 
         // Update the latest XML reference
         latestXmlRef.current = fixedXml;

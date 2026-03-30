@@ -309,40 +309,109 @@ def lambda_handler(event, context):
 
             print(f"Fix request - IP: {source_ip}, instruction: {instruction[:100]}")
 
-            # Call Bedrock with the Converse API
-            response = bedrock_client.converse(
-                modelId=BEDROCK_MODEL_ID,
-                system=[{
-                    'text': (
-                        'You are a MusicXML editing assistant for guitar transcriptions. '
-                        'The user will give you a MusicXML document and a change request. '
-                        'Apply the requested changes accurately and return ONLY the complete '
-                        'corrected MusicXML document. No explanation, no markdown fences, '
-                        'no extra text — just the raw XML starting with <?xml.'
-                    )
-                }],
-                messages=[{
-                    'role': 'user',
-                    'content': [{
-                        'text': (
-                            f'Here is the current MusicXML:\n\n{current_xml}\n\n'
-                            f'Please make this change: {instruction}'
-                        )
-                    }]
-                }],
-                inferenceConfig={
-                    'temperature': 0,
-                    'maxTokens': 8192,
-                },
+            system_prompt = (
+                'You are a MusicXML editing assistant for guitar transcriptions. '
+                'The user will give you a MusicXML document and a change request. '
+                'Apply the requested changes accurately and return ONLY the complete '
+                'corrected MusicXML document. No explanation, no markdown fences, '
+                'no extra text — just the raw XML starting with <?xml.'
             )
 
-            fixed_xml = response['output']['message']['content'][0]['text'].strip()
+            user_prompt = (
+                f'Here is the current MusicXML:\n\n{current_xml}\n\n'
+                f'Please make this change: {instruction}'
+            )
 
-            # Strip markdown fences if the model wraps them anyway
-            if fixed_xml.startswith('```'):
-                fixed_xml = fixed_xml.split('\n', 1)[1]  # remove first line
-                if fixed_xml.endswith('```'):
-                    fixed_xml = fixed_xml[:-3].rstrip()
+            # Try Converse API first, fall back to invoke_model
+            try:
+                response = bedrock_client.converse(
+                    modelId=BEDROCK_MODEL_ID,
+                    system=[{'text': system_prompt}],
+                    messages=[{
+                        'role': 'user',
+                        'content': [{'text': user_prompt}]
+                    }],
+                    inferenceConfig={
+                        'temperature': 0,
+                        'maxTokens': 8192,
+                    },
+                )
+                print(f"Converse response keys: {list(response.keys())}")
+                fixed_xml = response['output']['message']['content'][0]['text'].strip()
+
+            except Exception as converse_err:
+                print(f"Converse API failed: {converse_err}, falling back to invoke_model")
+
+                # Fallback: invoke_model with OpenAI-compatible format
+                request_body = json.dumps({
+                    'messages': [
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': user_prompt},
+                    ],
+                    'max_tokens': 8192,
+                    'temperature': 0,
+                })
+
+                response = bedrock_client.invoke_model(
+                    modelId=BEDROCK_MODEL_ID,
+                    contentType='application/json',
+                    accept='application/json',
+                    body=request_body,
+                )
+
+                response_body = json.loads(response['body'].read())
+                print(f"invoke_model response keys: {list(response_body.keys())}")
+
+                # Handle different response formats
+                if 'choices' in response_body:
+                    # OpenAI-compatible format
+                    fixed_xml = response_body['choices'][0]['message']['content'].strip()
+                elif 'output' in response_body:
+                    fixed_xml = response_body['output'].strip()
+                elif 'content' in response_body:
+                    if isinstance(response_body['content'], list):
+                        fixed_xml = response_body['content'][0]['text'].strip()
+                    else:
+                        fixed_xml = response_body['content'].strip()
+                elif 'completion' in response_body:
+                    fixed_xml = response_body['completion'].strip()
+                else:
+                    print(f"Unknown response format: {json.dumps(response_body)[:500]}")
+                    raise ValueError(f"Unexpected response format. Keys: {list(response_body.keys())}")
+
+            # Clean the model response to extract only MusicXML
+            import re
+            
+            print(f"Raw response length: {len(fixed_xml)}")
+            print(f"Raw response first 200 chars: {fixed_xml[:200]}")
+            
+            # Strip markdown fences if the model wraps them
+            fixed_xml = re.sub(r'```(?:xml|musicxml)?\s*\n?', '', fixed_xml)
+            fixed_xml = fixed_xml.replace('```', '').strip()
+            
+            # Remove reasoning/thinking/scratchpad blocks (model chain-of-thought)
+            # These may contain XML-like fragments so we must strip them first
+            for tag in ['reasoning', 'think', 'thinking', 'scratchpad']:
+                fixed_xml = re.sub(
+                    rf'<{tag}\b[^>]*>.*?</{tag}>',
+                    '', fixed_xml, flags=re.DOTALL
+                )
+            fixed_xml = fixed_xml.strip()
+            
+            # Extract only the XML content starting from <?xml or <score-partwise
+            xml_match = re.search(r'(<\?xml\b.*)', fixed_xml, flags=re.DOTALL)
+            if not xml_match:
+                xml_match = re.search(r'(<score-partwise\b.*)', fixed_xml, flags=re.DOTALL)
+            
+            if xml_match:
+                fixed_xml = xml_match.group(1).strip()
+                # Ensure we don't have trailing garbage after </score-partwise>
+                end_match = re.search(r'(</score-partwise>)', fixed_xml)
+                if end_match:
+                    fixed_xml = fixed_xml[:end_match.end()]
+            else:
+                print(f"Could not find XML in cleaned response: {fixed_xml[:500]}")
+                raise ValueError("AI response did not contain valid MusicXML")
 
             return {
                 'statusCode': 200,
