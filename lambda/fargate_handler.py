@@ -138,6 +138,7 @@ def notify_error(user_id, error_message):
             "userId": user_id,
             "type": "error",
             "data": {
+                "error": error_message,
                 "message": error_message
             }
         }

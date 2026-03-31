@@ -23,6 +23,7 @@ matplotlib==3.7.1
 pyrootutils==1.0.4      # standardizing the project root setup
 rich==13.3.2            # beautiful text formatting in terminal
 boto3                   # AWS SDK (included in Lambda but adding explicitly)
+yt-dlp                  # YouTube audio downloader
 
 
 h5py==3.10.0            # pinned for pre-built wheels
