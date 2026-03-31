@@ -128,6 +128,8 @@ def lambda_handler(event, context):
             file_id = body.get('file_id')
             filename = body.get('filename')
             user_id = body.get('user_id', 'anonymous')  # Accept userId from frontend
+            source_type = body.get('source_type', 'local')  # 'local' or 'youtube'
+            youtube_url = body.get('youtube_url')  # For YouTube sources
             
             if not file_id or not filename:
                 return {
@@ -136,29 +138,53 @@ def lambda_handler(event, context):
                     'body': json.dumps({'error': 'Missing file_id or filename'})
                 }
             
-            print(f"Processing generation request - File ID: {file_id}, User ID: {user_id}")
+            print(f"Processing generation request - File ID: {file_id}, User ID: {user_id}, Source: {source_type}")
             
-            # Determine file extension from filename
-            file_extension = os.path.splitext(filename)[1] if filename else '.mp3'
-            audio_key = f"uploads/{file_id}{file_extension}"
+            inference_payload = {
+                "bucket": BUCKET_NAME,
+                "user_id": user_id,
+                "source_type": source_type
+            }
             
-            # Verify file exists in S3
-            try:
-                s3_client.head_object(Bucket=BUCKET_NAME, Key=audio_key)
-            except Exception as e:
+            # Handle local file source
+            if source_type == 'local':
+                # Determine file extension from filename
+                file_extension = os.path.splitext(filename)[1] if filename else '.mp3'
+                audio_key = f"uploads/{file_id}{file_extension}"
+                
+                # Verify file exists in S3
+                try:
+                    s3_client.head_object(Bucket=BUCKET_NAME, Key=audio_key)
+                except Exception as e:
+                    return {
+                        'statusCode': 404,
+                        'headers': headers,
+                        'body': json.dumps({"error": f"Audio file not found: {audio_key}", "details": str(e)})
+                    }
+                
+                inference_payload["audio_key"] = audio_key
+            
+            # Handle YouTube source
+            elif source_type == 'youtube':
+                if not youtube_url:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'Missing youtube_url for YouTube source'})
+                    }
+                
+                inference_payload["youtube_url"] = youtube_url
+                inference_payload["video_id"] = file_id
+            
+            else:
                 return {
-                    'statusCode': 404,
+                    'statusCode': 400,
                     'headers': headers,
-                    'body': json.dumps({"error": f"Audio file not found: {audio_key}", "details": str(e)})
+                    'body': json.dumps({"error": f"Unknown source type: {source_type}"})
                 }
             
             # Invoke inference Lambda asynchronously
             # Pass userId to inference Lambda so it can forward to ECS
-            inference_payload = {
-                "audio_key": audio_key,
-                "bucket": BUCKET_NAME,
-                "user_id": user_id  # Pass userId to inference Lambda
-            }
             
             response = lambda_client.invoke(
                 FunctionName=INFERENCE_LAMBDA_ARN,
@@ -166,16 +192,23 @@ def lambda_handler(event, context):
                 Payload=json.dumps(inference_payload)
             )
             
+            response_body = {
+                "status": "PENDING",
+                "message": "Inference task started",
+                "file_id": file_id,
+                "user_id": user_id,
+                "source_type": source_type
+            }
+            
+            if source_type == 'local':
+                response_body["audio_key"] = inference_payload["audio_key"]
+            elif source_type == 'youtube':
+                response_body["youtube_url"] = youtube_url
+            
             return {
                 'statusCode': 202,
                 'headers': headers,
-                'body': json.dumps({
-                    "status": "PENDING",
-                    "message": "Inference task started",
-                    "file_id": file_id,
-                    "audio_key": audio_key,
-                    "user_id": user_id  # Return userId for confirmation
-                })
+                'body': json.dumps(response_body)
             }
             
         except Exception as e:
@@ -234,11 +267,44 @@ def lambda_handler(event, context):
                     "upload_url": presigned_url
                 }
             
+            # Handle YouTube link source
+            elif source_type == 'youtube':
+                if not isinstance(source, str):
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({"error": "YouTube source must be a URL string"})
+                    }
+                
+                # Extract video ID from YouTube URL
+                # Supports formats: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
+                video_id = None
+                if 'youtube.com/watch?v=' in source:
+                    video_id = source.split('v=')[1].split('&')[0]
+                elif 'youtu.be/' in source:
+                    video_id = source.split('youtu.be/')[1].split('?')[0]
+                elif 'youtube.com/embed/' in source:
+                    video_id = source.split('embed/')[1].split('?')[0]
+                
+                if not video_id:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({"error": "Invalid YouTube URL format"})
+                    }
+                
+                response_body = {
+                    "id": video_id,
+                    "name": f"YouTube Video {video_id}",
+                    "source_type": "youtube",
+                    "youtube_url": source
+                }
+            
             else:
                 return {
                     'statusCode': 400,
                     'headers': headers,
-                    'body': json.dumps({"error": f"Unknown audio source type: {source_type}. Only 'local' is supported."})
+                    'body': json.dumps({"error": f"Unknown audio source type: {source_type}. Supported types: 'local', 'youtube'."})
                 }
             
             return {

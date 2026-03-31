@@ -3,10 +3,20 @@ Fargate handler for running inference as a standalone task.
 This script is invoked when the container runs on ECS Fargate.
 
 Usage: Fargate task passes environment variables:
-  - AUDIO_KEY: S3 key of the audio file
-  - BUCKET: S3 bucket name
-  - TASK_ID: Unique task identifier for output
-  - USER_ID: User identifier for WebSocket notifications
+  Local file:
+    - AUDIO_KEY: S3 key of the audio file
+    - BUCKET: S3 bucket name
+    - TASK_ID: Unique task identifier for output
+    - USER_ID: User identifier for WebSocket notifications
+    - SOURCE_TYPE: "local" (default)
+  
+  YouTube:
+    - YOUTUBE_URL: YouTube video URL
+    - VIDEO_ID: YouTube video ID
+    - TASK_ID: Unique task identifier for output
+    - USER_ID: User identifier for WebSocket notifications
+    - SOURCE_TYPE: "youtube"
+    - BUCKET: S3 bucket name for storing output
 """
 
 import os
@@ -139,6 +149,55 @@ def notify_error(user_id, error_message):
         print(f"[NOTIFY] Error sent: {error_message}")
     except Exception as e:
         print(f"[NOTIFY ERROR] Failed to send error notification: {e}")
+
+
+def download_youtube_audio(youtube_url: str, output_path: str, user_id: str = None) -> str:
+    """
+    Download audio from YouTube using yt-dlp.
+    
+    Returns: Path to the downloaded audio file (MP3 format)
+    """
+    try:
+        import yt_dlp
+        
+        notify_progress(user_id, 15, "Downloading audio from YouTube...")
+        
+        # Configure yt-dlp to download audio only, convert to MP3
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_path,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': False,
+            'no_warnings': False,
+        }
+        
+        print(f"  Downloading from: {youtube_url}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=True)
+            video_title = info.get('title', 'unknown')
+            print(f"  Downloaded: {video_title}")
+        
+        # yt-dlp adds .mp3 extension
+        final_path = f"{output_path}.mp3"
+        if os.path.exists(final_path):
+            return final_path
+        else:
+            raise FileNotFoundError(f"Downloaded file not found at {final_path}")
+            
+    except ImportError:
+        error_msg = "yt-dlp is not installed. Please install it with: pip install yt-dlp"
+        print(f"ERROR: {error_msg}")
+        notify_error(user_id, error_msg)
+        raise
+    except Exception as e:
+        error_msg = f"Failed to download YouTube audio: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        notify_error(user_id, error_msg)
+        raise
 
 
 # === Helper Functions ===
@@ -388,23 +447,86 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
 
 if __name__ == "__main__":
     # Read configuration from environment variables
+    source_type = os.environ.get("SOURCE_TYPE", "local")
     bucket = os.environ.get("BUCKET") or os.environ.get("S3_BUCKET_NAME")
-    audio_key = os.environ.get("AUDIO_KEY")
     task_id = os.environ.get("TASK_ID", "default")
     user_id = os.environ.get("USER_ID", "anonymous")
     
-    if not bucket or not audio_key:
-        print("ERROR: Missing required environment variables: BUCKET, AUDIO_KEY")
-        print("  BUCKET:", bucket)
-        print("  AUDIO_KEY:", audio_key)
-        sys.exit(1)
+    print(f"=" * 60)
+    print(f"Fargate Inference Task")
+    print(f"=" * 60)
+    print(f"Source Type: {source_type}")
+    print(f"Task ID: {task_id}")
+    print(f"User ID: {user_id}")
+    print(f"=" * 60)
     
-    try:
-        run_inference(bucket, audio_key, task_id, user_id)
-    except Exception as e:
-        error_msg = f"Inference failed: {str(e)}"
-        print(f"\n❌ {error_msg}")
-        import traceback
-        traceback.print_exc()
-        notify_error(user_id, error_msg)
+    if source_type == "local":
+        audio_key = os.environ.get("AUDIO_KEY")
+        
+        if not bucket or not audio_key:
+            print("ERROR: Missing required environment variables for local source: BUCKET, AUDIO_KEY")
+            print("  BUCKET:", bucket)
+            print("  AUDIO_KEY:", audio_key)
+            sys.exit(1)
+        
+        print(f"Audio Key: {audio_key}")
+        print(f"Bucket: {bucket}")
+        
+        try:
+            run_inference(bucket, audio_key, task_id, user_id)
+        except Exception as e:
+            error_msg = f"Inference failed: {str(e)}"
+            print(f"\n❌ {error_msg}")
+            import traceback
+            traceback.print_exc()
+            notify_error(user_id, error_msg)
+            sys.exit(1)
+    
+    elif source_type == "youtube":
+        youtube_url = os.environ.get("YOUTUBE_URL")
+        video_id = os.environ.get("VIDEO_ID", "unknown")
+        
+        if not youtube_url or not bucket:
+            print("ERROR: Missing required environment variables for YouTube source: YOUTUBE_URL, BUCKET")
+            print("  YOUTUBE_URL:", youtube_url)
+            print("  BUCKET:", bucket)
+            sys.exit(1)
+        
+        print(f"YouTube URL: {youtube_url}")
+        print(f"Video ID: {video_id}")
+        print(f"Bucket: {bucket}")
+        
+        try:
+            # Download YouTube audio to local temp file
+            print("\n[1/2] Downloading audio from YouTube...")
+            notify_progress(user_id, 10, "Downloading audio from YouTube...")
+            
+            # Create data directory if it doesn't exist
+            os.makedirs(DATA_DIR, exist_ok=True)
+            
+            # Download audio (without extension, yt-dlp will add .mp3)
+            temp_audio_base = os.path.join(DATA_DIR, f"youtube_{video_id}")
+            local_audio_path = download_youtube_audio(youtube_url, temp_audio_base, user_id)
+            
+            print(f"  Downloaded to: {local_audio_path}")
+            
+            # Upload to S3 so it can be referenced later
+            audio_key = f"youtube/{video_id}.mp3"
+            print(f"\n  Uploading to S3: {audio_key}")
+            s3_client.upload_file(local_audio_path, bucket, audio_key)
+            
+            print(f"\n[2/2] Running inference...")
+            # Run inference with the downloaded file
+            run_inference(bucket, audio_key, task_id, user_id)
+            
+        except Exception as e:
+            error_msg = f"YouTube inference failed: {str(e)}"
+            print(f"\n❌ {error_msg}")
+            import traceback
+            traceback.print_exc()
+            notify_error(user_id, error_msg)
+            sys.exit(1)
+    
+    else:
+        print(f"ERROR: Unknown source type: {source_type}")
         sys.exit(1)

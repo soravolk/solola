@@ -19,33 +19,82 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler that triggers a Fargate task for ML inference.
     
-    Event: { "audio_key": "uploads/song.wav", "bucket": "my-bucket", "user_id": "user-123" }
+    Event: 
+      Local: { "audio_key": "uploads/song.wav", "bucket": "my-bucket", "user_id": "user-123", "source_type": "local" }
+      YouTube: { "youtube_url": "https://youtube.com/watch?v=...", "video_id": "...", "user_id": "user-123", "source_type": "youtube" }
     
     Returns: { "task_id": "...", "status": "PENDING" }
     """
-    bucket = event.get("bucket", S3_BUCKET)
-    audio_key = event.get("audio_key")
-    user_id = event.get("user_id", "anonymous")  # Accept userId from API Lambda
+    source_type = event.get("source_type", "local")
+    user_id = event.get("user_id", "anonymous")
     
-    if not audio_key:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"error": "Missing 'audio_key' in request"})
-        }
-    
-    print(f"Starting inference - Audio: {audio_key}, User: {user_id}")
+    print(f"Starting inference - Source: {source_type}, User: {user_id}")
     print(f"[DEBUG] user_id type: {type(user_id)}, value: '{user_id}'")
     
     # Generate unique task ID
     task_id = str(uuid.uuid4())
     
-    # Validate that the audio file exists in S3
-    try:
-        s3_client.head_object(Bucket=bucket, Key=audio_key)
-    except Exception as e:
+    # Handle different source types
+    if source_type == "local":
+        bucket = event.get("bucket", S3_BUCKET)
+        audio_key = event.get("audio_key")
+        
+        if not audio_key:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing 'audio_key' in request"})
+            }
+        
+        # Validate that the audio file exists in S3
+        try:
+            s3_client.head_object(Bucket=bucket, Key=audio_key)
+        except Exception as e:
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"error": f"Audio file not found: {audio_key}", "details": str(e)})
+            }
+        
+        env_vars = [
+            {"name": "BUCKET", "value": bucket},
+            {"name": "AUDIO_KEY", "value": audio_key},
+            {"name": "TASK_ID", "value": task_id},
+            {"name": "USER_ID", "value": user_id},
+            {"name": "SOURCE_TYPE", "value": "local"},
+        ]
+        tags = [
+            {"key": "TaskId", "value": task_id},
+            {"key": "AudioKey", "value": audio_key},
+            {"key": "UserId", "value": user_id},
+        ]
+        
+    elif source_type == "youtube":
+        youtube_url = event.get("youtube_url")
+        video_id = event.get("video_id", "unknown")
+        
+        if not youtube_url:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing 'youtube_url' in request"})
+            }
+        
+        env_vars = [
+            {"name": "YOUTUBE_URL", "value": youtube_url},
+            {"name": "VIDEO_ID", "value": video_id},
+            {"name": "TASK_ID", "value": task_id},
+            {"name": "USER_ID", "value": user_id},
+            {"name": "SOURCE_TYPE", "value": "youtube"},
+            {"name": "BUCKET", "value": S3_BUCKET},
+        ]
+        tags = [
+            {"key": "TaskId", "value": task_id},
+            {"key": "VideoId", "value": video_id},
+            {"key": "UserId", "value": user_id},
+        ]
+    
+    else:
         return {
-            "statusCode": 404,
-            "body": json.dumps({"error": f"Audio file not found: {audio_key}", "details": str(e)})
+            "statusCode": 400,
+            "body": json.dumps({"error": f"Unknown source_type: {source_type}"})
         }
     
     # Filter out empty strings from subnet/security group lists
@@ -60,8 +109,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     # Start Fargate task
     try:
-        print(f"[DEBUG] About to start ECS task with USER_ID: '{user_id}'")
-        print(f"[DEBUG] Environment overrides: BUCKET={bucket}, AUDIO_KEY={audio_key}, TASK_ID={task_id}, USER_ID={user_id}")
+        print(f"[DEBUG] About to start ECS task with USER_ID: '{user_id}', SOURCE_TYPE: '{source_type}'")
+        print(f"[DEBUG] Environment overrides: {env_vars}")
         
         response = ecs_client.run_task(
             cluster=ECS_CLUSTER,
@@ -78,20 +127,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "containerOverrides": [
                     {
                         "name": "inference",
-                        "environment": [
-                            {"name": "BUCKET", "value": bucket},
-                            {"name": "AUDIO_KEY", "value": audio_key},
-                            {"name": "TASK_ID", "value": task_id},
-                            {"name": "USER_ID", "value": user_id},  # Pass userId to ECS task
-                        ]
+                        "environment": env_vars
                     }
                 ]
             },
-            tags=[
-                {"key": "TaskId", "value": task_id},
-                {"key": "AudioKey", "value": audio_key},
-                {"key": "UserId", "value": user_id},  # Tag task with userId
-            ]
+            tags=tags
         )
         
         ecs_task_arn = response["tasks"][0]["taskArn"] if response.get("tasks") else None

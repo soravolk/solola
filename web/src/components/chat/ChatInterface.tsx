@@ -40,7 +40,7 @@ const SUGGESTION_CARDS = [
   {
     icon: Link,
     title: "YouTube Link",
-    description: "Paste a link to transcribe (coming soon)",
+    description: "Paste a link to transcribe",
   },
   {
     icon: Sparkles,
@@ -232,6 +232,7 @@ export const ChatInterface: React.FC = () => {
             file_id: id,
             filename: file.name,
             user_id: userId,
+            source_type: "local",
           }),
         });
 
@@ -252,6 +253,88 @@ export const ChatInterface: React.FC = () => {
           content: "Sorry, something went wrong.",
           status: "error",
           statusText: err?.message || "Upload or generation failed.",
+        });
+        setIsProcessing(false);
+      }
+    },
+    [userId, updateAssistantMessage],
+  );
+
+  // Handle YouTube link transcription
+  const handleYouTubeTranscription = useCallback(
+    async (url: string) => {
+      try {
+        // 1. Submit YouTube URL to get video info
+        const apiUrl =
+          import.meta.env.VITE_API_URL ||
+          "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/audio";
+
+        updateAssistantMessage({
+          status: "processing",
+          progress: 10,
+          statusText: "Processing YouTube link...",
+        });
+
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_type: "youtube",
+            source: url,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || `YouTube request failed: ${res.status}`);
+        }
+
+        const { id, name, youtube_url } = (await res.json()) as {
+          id: string;
+          name: string;
+          youtube_url: string;
+        };
+
+        // 2. Trigger generation
+        updateAssistantMessage({
+          status: "processing",
+          progress: 20,
+          statusText: "Starting transcription from YouTube...",
+        });
+
+        const generateUrl =
+          "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/generate";
+
+        const genRes = await fetch(generateUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file_id: id,
+            filename: name,
+            user_id: userId,
+            source_type: "youtube",
+            youtube_url: youtube_url,
+          }),
+        });
+
+        if (!genRes.ok) {
+          const errData = await genRes.json();
+          throw new Error(
+            errData.error || `Generation failed: ${genRes.status}`,
+          );
+        }
+
+        updateAssistantMessage({
+          status: "processing",
+          progress: 30,
+          statusText:
+            "Downloading and transcribing YouTube audio — this may take a few minutes...",
+        });
+      } catch (err: any) {
+        updateAssistantMessage({
+          content: "Sorry, something went wrong processing the YouTube link.",
+          status: "error",
+          statusText: err?.message || "YouTube transcription failed.",
         });
         setIsProcessing(false);
       }
@@ -351,13 +434,8 @@ export const ChatInterface: React.FC = () => {
         // File upload flow
         void handleUploadAndGenerate(file);
       } else if (text.includes("youtube.com") || text.includes("youtu.be")) {
-        // YouTube link — placeholder for future implementation
-        updateAssistantMessage({
-          content:
-            "YouTube link processing is coming soon! For now, please upload an audio file directly.",
-          status: "complete",
-        });
-        setIsProcessing(false);
+        // YouTube link flow
+        void handleYouTubeTranscription(text);
       } else if (latestXmlRef.current) {
         // There's a previous transcription — use AI to fix/edit it
         void handleAiFix(text);
