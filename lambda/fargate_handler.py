@@ -154,51 +154,108 @@ def notify_error(user_id, error_message):
 
 def download_youtube_audio(youtube_url: str, output_path: str, user_id: str = None) -> str:
     """
-    Download audio from YouTube using yt-dlp.
+    Download audio from YouTube using multiple strategies.
+    Tries different player clients to bypass YouTube bot detection from server IPs.
     
     Returns: Path to the downloaded audio file (MP3 format)
     """
-    try:
-        import yt_dlp
+    import yt_dlp
+    
+    notify_progress(user_id, 15, "Downloading audio from YouTube...")
+    
+    # Common options shared across all attempts
+    base_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': output_path,
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'quiet': False,
+        'no_warnings': False,
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+    }
+    
+    # Strategies to try in order - different player clients that may bypass bot detection
+    strategies = [
+        {
+            'name': 'tv_embedded client',
+            'extractor_args': {'youtube': {'player_client': ['tv_embedded']}},
+        },
+        {
+            'name': 'mediaconnect client',
+            'extractor_args': {'youtube': {'player_client': ['mediaconnect']}},
+        },
+        {
+            'name': 'android client with skip',
+            'extractor_args': {'youtube': {'player_client': ['android'], 'skip': ['webpage']}},
+        },
+        {
+            'name': 'web_creator client',
+            'extractor_args': {'youtube': {'player_client': ['web_creator']}},
+        },
+        {
+            'name': 'default (no override)',
+            'extractor_args': {},
+        },
+    ]
+    
+    last_error = None
+    for strategy in strategies:
+        print(f"  Attempting download with strategy: {strategy['name']}")
+        notify_progress(user_id, 18, f"Trying download method: {strategy['name']}...")
         
-        notify_progress(user_id, 15, "Downloading audio from YouTube...")
+        opts = {**base_opts}
+        if strategy['extractor_args']:
+            opts['extractor_args'] = strategy['extractor_args']
         
-        # Configure yt-dlp to download audio only, convert to MP3
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_path,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': False,
-            'no_warnings': False,
-        }
-        
-        print(f"  Downloading from: {youtube_url}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(youtube_url, download=True)
-            video_title = info.get('title', 'unknown')
-            print(f"  Downloaded: {video_title}")
-        
-        # yt-dlp adds .mp3 extension
-        final_path = f"{output_path}.mp3"
-        if os.path.exists(final_path):
-            return final_path
-        else:
-            raise FileNotFoundError(f"Downloaded file not found at {final_path}")
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(youtube_url, download=True)
+                video_title = info.get('title', 'unknown')
+                print(f"  ✅ Downloaded: {video_title} (strategy: {strategy['name']})")
             
-    except ImportError:
-        error_msg = "yt-dlp is not installed. Please install it with: pip install yt-dlp"
-        print(f"ERROR: {error_msg}")
-        notify_error(user_id, error_msg)
-        raise
-    except Exception as e:
-        error_msg = f"Failed to download YouTube audio: {str(e)}"
-        print(f"ERROR: {error_msg}")
-        notify_error(user_id, error_msg)
-        raise
+            # yt-dlp adds .mp3 extension
+            final_path = f"{output_path}.mp3"
+            if os.path.exists(final_path):
+                return final_path
+            
+            # Sometimes the file has the original extension, check for common ones
+            for ext in ['.mp3', '.m4a', '.webm', '.opus']:
+                candidate = f"{output_path}{ext}"
+                if os.path.exists(candidate):
+                    # Convert to mp3 if needed
+                    if ext != '.mp3':
+                        import subprocess
+                        mp3_path = f"{output_path}.mp3"
+                        subprocess.run(['ffmpeg', '-i', candidate, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', mp3_path], check=True)
+                        os.remove(candidate)
+                        return mp3_path
+                    return candidate
+            
+            print(f"  ⚠️ Strategy {strategy['name']} completed but file not found")
+            last_error = FileNotFoundError(f"Downloaded file not found at {final_path}")
+            
+        except Exception as e:
+            last_error = e
+            print(f"  ❌ Strategy {strategy['name']} failed: {str(e)[:200]}")
+            continue
+    
+    # All strategies failed
+    error_msg = (
+        "Could not download YouTube audio. YouTube is blocking downloads from this server. "
+        "Please download the audio manually and upload it as a file instead."
+    )
+    print(f"ERROR: {error_msg}")
+    print(f"Last yt-dlp error: {last_error}")
+    notify_error(user_id, error_msg)
+    raise Exception(error_msg)
 
 
 # === Helper Functions ===
@@ -521,11 +578,14 @@ if __name__ == "__main__":
             run_inference(bucket, audio_key, task_id, user_id)
             
         except Exception as e:
-            error_msg = f"YouTube inference failed: {str(e)}"
+            error_msg = str(e)
             print(f"\n❌ {error_msg}")
             import traceback
             traceback.print_exc()
-            notify_error(user_id, error_msg)
+            # Only notify if it's not already a clean user-facing message
+            # (download_youtube_audio already sends notify_error for known failures)
+            if "Please download the audio manually" not in error_msg:
+                notify_error(user_id, f"YouTube transcription failed: {error_msg}")
             sys.exit(1)
     
     else:

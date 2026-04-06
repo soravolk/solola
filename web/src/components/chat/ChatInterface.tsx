@@ -171,10 +171,11 @@ export const ChatInterface: React.FC = () => {
           message: wsMessage.message,
           full: wsMessage,
         });
-        const errorMsg = wsMessage.data?.error || 
-                        wsMessage.data?.message || 
-                        wsMessage.message || 
-                        "Unknown error";
+        const errorMsg =
+          wsMessage.data?.error ||
+          wsMessage.data?.message ||
+          wsMessage.message ||
+          "Unknown error";
         updateAssistantMessage({
           content: "An error occurred during processing.",
           status: "error",
@@ -276,7 +277,7 @@ export const ChatInterface: React.FC = () => {
     async (url: string) => {
       try {
         console.log("[YouTube] Starting transcription for:", url);
-        
+
         // 1. Submit YouTube URL to get video info
         const apiUrl =
           import.meta.env.VITE_API_URL ||
@@ -296,7 +297,7 @@ export const ChatInterface: React.FC = () => {
             source: url,
           }),
         });
-        
+
         console.log("[YouTube] Audio API response status:", res.status);
 
         if (!res.ok) {
@@ -312,7 +313,7 @@ export const ChatInterface: React.FC = () => {
           name: string;
           youtube_url: string;
         };
-        
+
         console.log("[YouTube] Video info:", { id, name });
 
         // 2. Trigger generation
@@ -336,7 +337,7 @@ export const ChatInterface: React.FC = () => {
             youtube_url: youtube_url,
           }),
         });
-        
+
         console.log("[YouTube] Generate API response status:", genRes.status);
 
         if (!genRes.ok) {
@@ -346,7 +347,7 @@ export const ChatInterface: React.FC = () => {
             errData.error || `Generation failed: ${genRes.status}`,
           );
         }
-        
+
         console.log("[YouTube] Transcription started successfully");
 
         updateAssistantMessage({
