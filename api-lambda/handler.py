@@ -380,7 +380,24 @@ def lambda_handler(event, context):
                 'The user will give you a MusicXML document and a change request. '
                 'Apply the requested changes accurately and return ONLY the complete '
                 'corrected MusicXML document. No explanation, no markdown fences, '
-                'no extra text — just the raw XML starting with <?xml.'
+                'no extra text — just the raw XML starting with <?xml.\n\n'
+                'IMPORTANT: Guitar standard tuning open string pitches (fret 0):\n'
+                '  String 1 (high E) = E4\n'
+                '  String 2 = B3\n'
+                '  String 3 = G3\n'
+                '  String 4 = D3\n'
+                '  String 5 = A2\n'
+                '  String 6 (low E) = E2\n\n'
+                'Each fret raises the pitch by one semitone. The chromatic scale is: '
+                'C, C#/Db, D, D#/Eb, E, F, F#/Gb, G, G#/Ab, A, A#/Bb, B. '
+                'The octave increments after B (i.e., B4 -> C5).\n\n'
+                'When changing <string> or <fret>, you MUST recalculate and update '
+                'the <pitch> element (<step>, <alter>, <octave>) to match the new '
+                'string and fret. For example:\n'
+                '  String 2, Fret 12 = B4 (step=B, octave=4)\n'
+                '  String 1, Fret 13 = F5 (step=F, octave=5)\n'
+                '  String 3, Fret 9 = E4 (step=E, octave=4)\n'
+                'Use <alter>-1</alter> for flats and <alter>1</alter> for sharps.'
             )
 
             user_prompt = (
@@ -388,7 +405,9 @@ def lambda_handler(event, context):
                 f'Please make this change: {instruction}'
             )
 
-            # Try Converse API first, fall back to invoke_model
+            # Call Bedrock Converse API (no retries — keep it fast within 30s API Gateway limit)
+            fixed_xml = None
+
             try:
                 response = bedrock_client.converse(
                     modelId=BEDROCK_MODEL_ID,
@@ -403,10 +422,48 @@ def lambda_handler(event, context):
                     },
                 )
                 print(f"Converse response keys: {list(response.keys())}")
-                fixed_xml = response['output']['message']['content'][0]['text'].strip()
+
+                # Robustly extract text from Converse response
+                try:
+                    output_msg = response.get('output', {}).get('message', {})
+                    content_list = output_msg.get('content', [])
+                    print(f"Converse content structure: {[{k: type(v).__name__ for k, v in item.items()} if isinstance(item, dict) else type(item).__name__ for item in content_list]}")
+
+                    for item in content_list:
+                        if isinstance(item, dict):
+                            if 'text' in item:
+                                fixed_xml = item['text'].strip()
+                                break
+                            # Some models return content differently
+                            for key in ('body', 'value', 'content'):
+                                if key in item:
+                                    fixed_xml = str(item[key]).strip()
+                                    break
+                        elif isinstance(item, str):
+                            fixed_xml = item.strip()
+                            break
+                        if fixed_xml:
+                            break
+
+                    if not fixed_xml:
+                        # Last resort: dump content for debugging
+                        print(f"Could not extract text from content: {json.dumps(content_list, default=str)[:1000]}")
+                        # Try entire output as string
+                        raw = json.dumps(response.get('output', {}), default=str)
+                        if '<?xml' in raw:
+                            import re as _re
+                            m = _re.search(r'(<\?xml.*?</score-partwise>)', raw, _re.DOTALL)
+                            if m:
+                                fixed_xml = m.group(1).strip()
+                                print("Extracted XML from raw output dump")
+
+                except Exception as parse_err:
+                    print(f"Error parsing Converse response: {parse_err}")
+                    print(f"Full response output: {json.dumps(response.get('output', {}), default=str)[:2000]}")
+                    raise
 
             except Exception as converse_err:
-                print(f"Converse API failed: {converse_err}, falling back to invoke_model")
+                print(f"Converse API failed: {converse_err}, trying invoke_model")
 
                 # Fallback: invoke_model with OpenAI-compatible format
                 request_body = json.dumps({
@@ -428,22 +485,23 @@ def lambda_handler(event, context):
                 response_body = json.loads(response['body'].read())
                 print(f"invoke_model response keys: {list(response_body.keys())}")
 
-                # Handle different response formats
                 if 'choices' in response_body:
-                    # OpenAI-compatible format
                     fixed_xml = response_body['choices'][0]['message']['content'].strip()
-                elif 'output' in response_body:
-                    fixed_xml = response_body['output'].strip()
                 elif 'content' in response_body:
                     if isinstance(response_body['content'], list):
-                        fixed_xml = response_body['content'][0]['text'].strip()
+                        fixed_xml = response_body['content'][0].get('text', str(response_body['content'][0])).strip()
                     else:
-                        fixed_xml = response_body['content'].strip()
+                        fixed_xml = str(response_body['content']).strip()
+                elif 'output' in response_body:
+                    fixed_xml = str(response_body['output']).strip()
                 elif 'completion' in response_body:
                     fixed_xml = response_body['completion'].strip()
                 else:
                     print(f"Unknown response format: {json.dumps(response_body)[:500]}")
                     raise ValueError(f"Unexpected response format. Keys: {list(response_body.keys())}")
+
+            if not fixed_xml:
+                raise ValueError("Bedrock returned empty response")
 
             # Clean the model response to extract only MusicXML
             import re

@@ -395,8 +395,15 @@ export const ChatInterface: React.FC = () => {
         });
 
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || `Fix request failed: ${res.status}`);
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.error || `Fix request failed: ${res.status}`;
+          // Provide user-friendly message for common errors
+          if (res.status === 503 || res.status === 429) {
+            throw new Error(
+              "The AI service is temporarily busy. Please try again in a moment.",
+            );
+          }
+          throw new Error(errMsg);
         }
 
         updateAssistantMessage({
