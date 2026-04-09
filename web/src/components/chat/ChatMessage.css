@@ -238,6 +238,19 @@
   min-width: 700px;
 }
 
+.chat-tab-viewer-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+}
+
 /* ─── Error State ─── */
 .chat-error {
   display: flex;

@@ -537,6 +537,46 @@ def lambda_handler(event, context):
                 print(f"Could not find XML in cleaned response: {fixed_xml[:500]}")
                 raise ValueError("AI response did not contain valid MusicXML")
 
+            # Fix common AI MusicXML issues
+            # AI sometimes writes <step>A#</step> instead of <step>A</step><alter>1</alter>
+            fixed_xml = re.sub(
+                r'<step>([A-G])#</step>',
+                r'<step>\1</step><alter>1</alter>',
+                fixed_xml
+            )
+            fixed_xml = re.sub(
+                r'<step>([A-G])b</step>',
+                r'<step>\1</step><alter>-1</alter>',
+                fixed_xml
+            )
+
+            # Remove Guitar Pro processing instructions (<?GP ...?>) that can
+            # trigger buggy GP-specific rendering paths in AlphaTab
+            fixed_xml = re.sub(r'<\?GP\b.*?\?>', '', fixed_xml, flags=re.DOTALL)
+
+            # Fix grace note structure: <grace/> must come before <pitch>,
+            # grace notes must not have <duration>, and slides on grace notes
+            # can crash AlphaTab's rendering engine
+            def fix_grace_note(m):
+                inner = m.group(1)
+                grace_match = re.search(r'<grace\s*/?>', inner)
+                if not grace_match:
+                    return m.group(0)
+                # Remove grace element from current position
+                fixed = re.sub(r'<grace\s*/?>', '', inner, count=1)
+                # Remove <duration>...</duration> from grace notes
+                fixed = re.sub(r'<duration>[^<]*</duration>', '', fixed, count=1)
+                # Remove slide notations from grace notes
+                fixed = re.sub(r'<slide\b[^/]*/>', '', fixed)
+                # Insert <grace /> as first child
+                return f'<note><grace />{fixed}</note>'
+            fixed_xml = re.sub(
+                r'<note>(.*?)</note>',
+                fix_grace_note,
+                fixed_xml,
+                flags=re.DOTALL
+            )
+
             return {
                 'statusCode': 200,
                 'headers': headers,

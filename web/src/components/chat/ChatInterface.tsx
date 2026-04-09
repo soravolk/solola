@@ -9,13 +9,24 @@ import "./ChatInterface.css";
 const generateId = () =>
   `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-/** Strip reasoning/thinking blocks and extract only MusicXML from AI response */
+/** Strip reasoning/thinking blocks, fix common AI issues, and extract MusicXML */
 function sanitizeXml(raw: string): string {
   // Remove <reasoning>, <think>, <thinking>, <scratchpad> blocks
   let cleaned = raw.replace(
     /<(reasoning|think|thinking|scratchpad)\b[^>]*>[\s\S]*?<\/\1>/gi,
     "",
   );
+
+  // Fix AI-generated pitch issues: <step>A#</step> → <step>A</step><alter>1</alter>
+  cleaned = cleaned.replace(
+    /<step>([A-Ga-g])#<\/step>/g,
+    (_, s) => `<step>${s.toUpperCase()}</step><alter>1</alter>`,
+  );
+  cleaned = cleaned.replace(
+    /<step>([A-Ga-g])b<\/step>/g,
+    (_, s) => `<step>${s.toUpperCase()}</step><alter>-1</alter>`,
+  );
+
   // Extract from <?xml or <score-partwise to </score-partwise>
   const xmlMatch = cleaned.match(
     /(<\?xml\b[\s\S]*<\/score-partwise>)|(<score-partwise\b[\s\S]*<\/score-partwise>)/,
@@ -545,9 +556,19 @@ export const ChatInterface: React.FC = () => {
           )}
 
           {hasUserMessages &&
-            messages.map((msg) => (
-              <ChatMessageBubble key={msg.id} message={msg} />
-            ))}
+            (() => {
+              // Only mount AlphaTab for the latest message with XML
+              const latestXmlMsgId = [...messages]
+                .reverse()
+                .find((m) => m.xmlContent && m.status === "complete")?.id;
+              return messages.map((msg) => (
+                <ChatMessageBubble
+                  key={msg.id}
+                  message={msg}
+                  isLatestXml={msg.id === latestXmlMsgId}
+                />
+              ));
+            })()}
           <div ref={messagesEndRef} />
         </div>
       </div>

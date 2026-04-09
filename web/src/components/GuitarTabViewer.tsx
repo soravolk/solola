@@ -207,6 +207,15 @@ export const GuitarTabViewer: React.FC<GuitarTabViewerProps> = ({
         </div>
       )}
 
+      {/* ── Render Error ── */}
+      {state.renderError && !state.isLoading && (
+        <div className="at-overlay">
+          <div className="at-overlay-content" style={{ color: '#ff6b6b' }}>
+            <span>⚠ {state.renderError}</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Content ── */}
       <div className="at-content">
         {!showXml ? (

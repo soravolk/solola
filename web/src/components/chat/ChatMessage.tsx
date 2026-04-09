@@ -15,9 +15,11 @@ import "./ChatMessage.css";
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  /** True when this message holds the most recent XML — only this one mounts AlphaTab */
+  isLatestXml?: boolean;
 }
 
-export const ChatMessageBubble: React.FC<ChatMessageProps> = ({ message }) => {
+export const ChatMessageBubble: React.FC<ChatMessageProps> = ({ message, isLatestXml = false }) => {
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
   const [copied, setCopied] = useState(false);
@@ -132,9 +134,16 @@ export const ChatMessageBubble: React.FC<ChatMessageProps> = ({ message }) => {
                 <span>{copied ? "Copied!" : "Copy XML"}</span>
               </button>
             </div>
-            <div className="chat-tab-viewer">
-              <GuitarTabViewer xmlContent={message.xmlContent} />
-            </div>
+            {isLatestXml ? (
+              <div className="chat-tab-viewer">
+                <GuitarTabViewer xmlContent={message.xmlContent} />
+              </div>
+            ) : (
+              <div className="chat-tab-viewer-collapsed">
+                <Music size={16} />
+                <span>Transcription (see latest below)</span>
+              </div>
+            )}
           </>
         )}
 

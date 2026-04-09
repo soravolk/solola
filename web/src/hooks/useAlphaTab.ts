@@ -3,6 +3,7 @@ import type { AlphaTabApi as AlphaTabApiType } from "@coderline/alphatab";
 
 export interface AlphaTabState {
   isLoading: boolean;
+  renderError: string | null;
   playerReady: boolean;
   isPlaying: boolean;
   songTitle: string;
@@ -45,6 +46,7 @@ export const useAlphaTab = ({
   const apiRef = useRef<AlphaTabApiType | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [songTitle, setSongTitle] = useState("");
@@ -87,7 +89,10 @@ export const useAlphaTab = ({
         const api = new AlphaTabApi(mainRef.current, settings);
         apiRef.current = api;
 
-        api.renderStarted.on(() => setIsLoading(true));
+        api.renderStarted.on(() => {
+          setIsLoading(true);
+          setRenderError(null);
+        });
         api.renderFinished.on(() => setIsLoading(false));
 
         api.scoreLoaded.on((score) => {
@@ -111,7 +116,15 @@ export const useAlphaTab = ({
           setCurrentTime(formatDuration(e.currentTime));
           setEndTime(formatDuration(e.endTime));
         });
-        api.error.on((e) => console.error("AlphaTab error:", e));
+        api.error.on((e) => {
+          console.error("AlphaTab error:", e);
+          setIsLoading(false);
+          setRenderError(
+            typeof e === "object" && e?.message
+              ? e.message
+              : "Failed to render music sheet",
+          );
+        });
 
         const encoder = new TextEncoder();
         const data = encoder.encode(xmlContent);
@@ -169,6 +182,7 @@ export const useAlphaTab = ({
 
   const state: AlphaTabState = {
     isLoading,
+    renderError,
     playerReady,
     isPlaying,
     songTitle,
