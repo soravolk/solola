@@ -300,12 +300,11 @@ def create_musicxml(notes):
     ET.SubElement(attributes, 'staves').text = '1'
     
     clef = ET.SubElement(attributes, 'clef', number="1")
-    ET.SubElement(clef, 'sign').text = 'G'
-    ET.SubElement(clef, 'line').text = '2'
+    ET.SubElement(clef, 'sign').text = 'TAB'
+    ET.SubElement(clef, 'line').text = '5'
     
     # Staff details with guitar tuning (standard tuning E-A-D-G-B-E)
     staff_details = ET.SubElement(attributes, 'staff-details')
-    ET.SubElement(staff_details, 'staff-lines').text = '6'
     
     # Standard guitar tuning (from string 1 to 6: E3, A3, D4, G4, B4, E5)
     tuning_pitches = [

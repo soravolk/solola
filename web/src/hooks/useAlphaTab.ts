@@ -54,7 +54,7 @@ export const useAlphaTab = ({
   const [currentTime, setCurrentTime] = useState("00:00");
   const [endTime, setEndTime] = useState("00:00");
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [zoom, setZoomState] = useState(100);
+  const [zoom, setZoomState] = useState(80);
   const [layout, setLayoutState] = useState<"page" | "horizontal">("page");
 
   useEffect(() => {
@@ -85,6 +85,10 @@ export const useAlphaTab = ({
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.scrollElement = viewportRef.current;
         settings.display.layoutMode = LayoutMode.Page;
+        settings.display.scale = 0.8;
+        // Shrink tab number font (default 13px) and grace font (default 11px)
+        settings.display.resources.tablatureFont.size = 12;
+        settings.display.resources.graceFont.size = 9;
 
         const api = new AlphaTabApi(mainRef.current, settings);
         apiRef.current = api;
