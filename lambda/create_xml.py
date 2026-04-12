@@ -270,10 +270,13 @@ def create_musicxml(notes):
     score_part = ET.SubElement(part_list, 'score-part', id="P1")
     ET.SubElement(score_part, 'part-name').text = 'Overdriven Guitar'
     ET.SubElement(score_part, 'part-abbreviation').text = 'guit.'
-    midi_instrument = ET.SubElement(score_part, 'midi-instrument', id="P1")
+    # score-instrument is required for midi-instrument to be recognized
+    score_instrument = ET.SubElement(score_part, 'score-instrument', id="P1-I1")
+    ET.SubElement(score_instrument, 'instrument-name').text = 'Overdriven Guitar'
+    midi_instrument = ET.SubElement(score_part, 'midi-instrument', id="P1-I1")
     ET.SubElement(midi_instrument, 'midi-channel').text = '1'
-    ET.SubElement(midi_instrument, 'midi-bank').text = '0'
-    ET.SubElement(midi_instrument, 'midi-program').text = '29'
+    ET.SubElement(midi_instrument, 'midi-bank').text = '1'
+    ET.SubElement(midi_instrument, 'midi-program').text = '30'
     ET.SubElement(midi_instrument, 'volume').text = '80'
     ET.SubElement(midi_instrument, 'pan').text = '0'
     
