@@ -363,20 +363,25 @@ def create_musicxml(notes):
                 ET.SubElement(pitch_element, 'step').text = 'X'
                 ET.SubElement(pitch_element, 'octave').text = '0'
             else:
-                step_map = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+                step_map = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B']
+                alter_map = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0]
                 step = step_map[(pitch % 12)]
+                alter = alter_map[(pitch % 12)]
                 octave = (pitch // 12) - 1  # MIDI pitch to octave (MusicXML)
 
                 # Pitch details
                 pitch_element = ET.SubElement(note, 'pitch')
                 ET.SubElement(pitch_element, 'step').text = step
+                if alter:
+                    ET.SubElement(pitch_element, 'alter').text = str(alter)
                 ET.SubElement(pitch_element, 'octave').text = str(octave)
 
         # Duration (in quarter notes)
         ET.SubElement(note, 'duration').text = str(duration)
 
-        if duration in dur_map:
-            note_type, dotted, triplet, grace = dur_map[duration][1], dur_map[duration][2], dur_map[duration][3], dur_map[duration][4]
+        mapped_dur = duration if duration in dur_map else min(dur_map.keys(), key=lambda k: abs(k - duration) if k > 0 else float('inf'))
+        if mapped_dur in dur_map:
+            note_type, dotted, triplet, grace = dur_map[mapped_dur][1], dur_map[mapped_dur][2], dur_map[mapped_dur][3], dur_map[mapped_dur][4]
             ET.SubElement(note, 'type').text = note_type
 
             # Add dot if the note is dotted
