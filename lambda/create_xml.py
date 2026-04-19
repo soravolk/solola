@@ -111,7 +111,13 @@ def process_tied_notes(notes):
 
         # Check if the current start aligns with the previous note's end
         if i > 0 and start != previous_end:
-            raise NoteAlignmentError(f"Note misalignment: previous note ended at {previous_end}, but current note starts at {start}")
+            gap = start - previous_end
+            if 0 < gap <= 2:
+                # Small gap from model prediction rounding — snap start to previous end
+                duration += gap
+                start = previous_end
+            else:
+                raise NoteAlignmentError(f"Note misalignment: previous note ended at {previous_end}, but current note starts at {start}")
 
         current_beat = start % bar_length
 
