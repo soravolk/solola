@@ -23,6 +23,7 @@ import os
 import sys
 import json
 import shutil
+import subprocess
 import boto3
 import librosa
 
@@ -380,10 +381,18 @@ def run_inference(bucket: str, audio_key: str, task_id: str = None, user_id: str
         track_name = os.path.splitext(os.path.basename(local_audio_path))[0]
         print(f"  Track name: {track_name}")
         
-        # 3. Load audio with librosa
+        # 3. Convert to WAV and load audio with librosa
         print(f"\n[3/7] Loading audio with librosa...")
         notify_progress(user_id, 30, "Loading and analyzing audio...")
-        audio, original_sr = librosa.load(local_audio_path)
+        wav_path = os.path.join(DATA_DIR, f"{track_name}.wav")
+        if not local_audio_path.endswith('.wav'):
+            print(f"  Converting to WAV...")
+            subprocess.run(
+                ['ffmpeg', '-i', local_audio_path, '-ar', '22050', '-ac', '1', wav_path],
+                check=True, capture_output=True,
+            )
+            local_audio_path = wav_path
+        audio, original_sr = librosa.load(local_audio_path, sr=None)
         print(f"  Duration: {len(audio) / original_sr:.2f}s, Sample rate: {original_sr}")
         
         # 4. Extract tempo
