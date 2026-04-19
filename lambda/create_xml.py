@@ -330,7 +330,7 @@ def create_musicxml(notes):
         ET.SubElement(staff_tuning, 'tuning-octave').text = str(octave)
 
     current_measure_number = 1
-    #current_measure = None
+    measure_fill = 0  # Track accumulated duration in current measure
 
     for i, note_data in enumerate(notes):
         start_pos, duration, pitch, string, fret, tech, tied = note_data
@@ -342,8 +342,23 @@ def create_musicxml(notes):
 
         # Create a new measure if the note belongs to a new measure
         if measure_number != current_measure_number:
+            # Pad the previous measure if incomplete
+            remaining = QUARTER_NOTES_PER_MEASURE - measure_fill
+            if 0 < remaining < QUARTER_NOTES_PER_MEASURE:
+                fill_rest = ET.SubElement(current_measure, 'note')
+                ET.SubElement(fill_rest, 'rest')
+                ET.SubElement(fill_rest, 'duration').text = str(remaining)
+                fill_key = remaining if remaining in dur_map else min(
+                    dur_map.keys(), key=lambda k: abs(k - remaining) if k > 0 else float('inf')
+                )
+                if fill_key in dur_map:
+                    ET.SubElement(fill_rest, 'type').text = dur_map[fill_key][1]
+                    if dur_map[fill_key][2]:
+                        ET.SubElement(fill_rest, 'dot')
+                ET.SubElement(fill_rest, 'voice').text = '1'
             current_measure = ET.SubElement(part, 'measure', number=str(measure_number))
             current_measure_number = measure_number
+            measure_fill = 0
 
         # If no measure exists yet, create the first one
         # if current_measure is None:
@@ -376,10 +391,10 @@ def create_musicxml(notes):
                     ET.SubElement(pitch_element, 'alter').text = str(alter)
                 ET.SubElement(pitch_element, 'octave').text = str(octave)
 
-        # Duration (in quarter notes)
-        ET.SubElement(note, 'duration').text = str(duration)
-
+        # Duration — quantize to nearest standard note value for consistency
         mapped_dur = duration if duration in dur_map else min(dur_map.keys(), key=lambda k: abs(k - duration) if k > 0 else float('inf'))
+        ET.SubElement(note, 'duration').text = str(mapped_dur)
+        measure_fill += mapped_dur
         if mapped_dur in dur_map:
             note_type, dotted, triplet, grace = dur_map[mapped_dur][1], dur_map[mapped_dur][2], dur_map[mapped_dur][3], dur_map[mapped_dur][4]
             ET.SubElement(note, 'type').text = note_type
@@ -420,6 +435,21 @@ def create_musicxml(notes):
                 ET.SubElement(note, 'tie', type='stop')
             if i + 1 < len(notes) and notes[i + 1][-1]:
                 tied_note = ET.SubElement(note, 'tie', type='start')
+
+    # Pad the last measure if incomplete
+    remaining = QUARTER_NOTES_PER_MEASURE - measure_fill
+    if 0 < remaining < QUARTER_NOTES_PER_MEASURE:
+        fill_rest = ET.SubElement(current_measure, 'note')
+        ET.SubElement(fill_rest, 'rest')
+        ET.SubElement(fill_rest, 'duration').text = str(remaining)
+        fill_key = remaining if remaining in dur_map else min(
+            dur_map.keys(), key=lambda k: abs(k - remaining) if k > 0 else float('inf')
+        )
+        if fill_key in dur_map:
+            ET.SubElement(fill_rest, 'type').text = dur_map[fill_key][1]
+            if dur_map[fill_key][2]:
+                ET.SubElement(fill_rest, 'dot')
+        ET.SubElement(fill_rest, 'voice').text = '1'
 
     return ET.ElementTree(root)
 
