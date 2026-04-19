@@ -68,7 +68,7 @@ variable "api_lambda_memory" {
 variable "cors_origins" {
   description = "Allowed CORS origins for API Gateway"
   type        = list(string)
-  default     = ["https://d2endw6x9lawf1.cloudfront.net", "http://localhost:5173"]
+  default     = ["https://solola.net", "https://www.solola.net", "http://localhost:5173"]
 }
 
 variable "bedrock_model_id" {

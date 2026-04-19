@@ -34,6 +34,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   default_root_object = "index.html"
   comment             = "EG Solo Frontend Distribution"
   price_class         = "PriceClass_100" # US, Canada, Europe only (cheapest)
+  aliases             = ["solola.net", "www.solola.net"]
 
   # S3 origin
   origin {
@@ -81,13 +82,9 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   # SSL/TLS certificate
   viewer_certificate {
-    cloudfront_default_certificate = true
-    minimum_protocol_version       = "TLSv1.2_2021"
-
-    # For custom domain (uncomment and configure):
-    # acm_certificate_arn      = aws_acm_certificate.cert.arn
-    # ssl_support_method       = "sni-only"
-    # minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn      = aws_acm_certificate_validation.solola.certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 
   tags = {
@@ -216,8 +213,8 @@ output "cloudfront_domain_name" {
 }
 
 output "frontend_url" {
-  description = "Frontend URL (CloudFront distribution)"
-  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+  description = "Frontend URL"
+  value       = "https://solola.net"
 }
 
 output "frontend_s3_bucket" {

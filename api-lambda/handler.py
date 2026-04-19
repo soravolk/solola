@@ -106,9 +106,16 @@ def lambda_handler(event, context):
     print(f"Extracted path: {request_path}")
     print(f"Extracted method: {http_method}")
     
-    # CORS headers
+    # CORS headers - reflect the request origin if it's in the allowed list
+    allowed_origins = {
+        'https://solola.net',
+        'https://www.solola.net',
+        'http://localhost:5173',
+    }
+    request_origin = event.get('headers', {}).get('origin', '')
+    cors_origin = request_origin if request_origin in allowed_origins else 'https://solola.net'
     headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': cors_origin,
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
         'Content-Type': 'application/json'
