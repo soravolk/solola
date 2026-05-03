@@ -19,7 +19,10 @@ interface ChatMessageProps {
   isLatestXml?: boolean;
 }
 
-export const ChatMessageBubble: React.FC<ChatMessageProps> = ({ message, isLatestXml = false }) => {
+export const ChatMessageBubble: React.FC<ChatMessageProps> = ({
+  message,
+  isLatestXml = false,
+}) => {
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
   const [copied, setCopied] = useState(false);

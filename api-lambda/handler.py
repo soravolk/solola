@@ -177,6 +177,68 @@ def transpose_musicxml(xml_string: str, semitones: int) -> str:
 
 # ---------------------------------------------------------------------------
 
+def _classify_intent(instruction: str, client, model_id: str) -> str:
+    """
+    Use a cheap Bedrock call (no XML) to classify the user's instruction into
+    one of: 'restore_original' | 'transpose' | 'fix'.
+    Falls back to 'fix' on any error so the full AI path is always a safe default.
+    """
+    prompt = (
+        "Classify the following guitar transcription edit request into EXACTLY one of "
+        "these intents:\n"
+        "  restore_original – the user wants the transcription reverted to its original state\n"
+        "  transpose        – the user wants all notes shifted up or down by semitones/half-steps\n"
+        "  fix              – any other edit (e.g. correct a note, change rhythm, add articulation)\n\n"
+        f"Request: \"{instruction}\"\n\n"
+        "Reply with a single JSON object and nothing else: "
+        "{\"intent\": \"<restore_original|transpose|fix>\"}"
+    )
+    try:
+        response = client.converse(
+            modelId=model_id,
+            messages=[{'role': 'user', 'content': [{'text': prompt}]}],
+            inferenceConfig={'temperature': 0, 'maxTokens': 32},
+        )
+        text = response['output']['message']['content'][0]['text'].strip()
+        import re as _re
+        m = _re.search(r'"intent"\s*:\s*"(restore_original|transpose|fix)"', text)
+        return m.group(1) if m else 'fix'
+    except Exception as e:
+        print(f"Intent classification failed: {e}")
+        return 'fix'
+
+
+def _classify_transpose_semitones(instruction: str, client, model_id: str):
+    """
+    Ask the model to extract the semitone count from a transpose instruction.
+    Returns a signed int or None on failure.
+    """
+    prompt = (
+        "Extract the transposition amount from this guitar instruction.\n"
+        f"Instruction: \"{instruction}\"\n\n"
+        "Reply with a single JSON object: "
+        "{\"semitones\": <signed integer, positive=up, negative=down>}\n"
+        "If you cannot determine the amount, reply {\"semitones\": null}."
+    )
+    try:
+        response = client.converse(
+            modelId=model_id,
+            messages=[{'role': 'user', 'content': [{'text': prompt}]}],
+            inferenceConfig={'temperature': 0, 'maxTokens': 32},
+        )
+        text = response['output']['message']['content'][0]['text'].strip()
+        import re as _re, json as _json
+        m = _re.search(r'\{.*?\}', text, _re.DOTALL)
+        if m:
+            val = _json.loads(m.group(0)).get('semitones')
+            return int(val) if val is not None else None
+    except Exception as e:
+        print(f"Transpose semitone classification failed: {e}")
+    return None
+
+
+# ---------------------------------------------------------------------------
+
 def check_rate_limit(identifier: str) -> dict:
     """Check if IP/user has exceeded rate limits. Returns {'allowed': bool, 'error': str}"""
     now = datetime.utcnow()
@@ -540,7 +602,7 @@ def lambda_handler(event, context):
 
             print(f"Fix request - IP: {source_ip}, instruction: {instruction[:100]}")
 
-            # --- Fast path: deterministic transpose (no AI needed) ---
+            # --- Fast path 1: deterministic transpose (no AI needed) ---
             transpose_semitones = parse_transpose_semitones(instruction)
             if transpose_semitones is not None:
                 print(f"Detected transpose request: {transpose_semitones} semitone(s)")
@@ -551,6 +613,34 @@ def lambda_handler(event, context):
                     'body': json.dumps({'xmlContent': transposed_xml})
                 }
 
+            # --- Fast path 2: cheap intent classification (no XML sent) ---
+            # For instructions not caught by regex, ask a small model to classify
+            # the intent. The prompt contains NO XML, so it never hits token limits.
+            # Only proceed to the full XML-rewrite call when intent == "fix".
+            detected_intent = _classify_intent(instruction, bedrock_client, BEDROCK_MODEL_ID)
+            print(f"Classified intent: {detected_intent}")
+
+            if detected_intent == 'restore_original':
+                # Signal the frontend to restore; actual XML swap happens client-side.
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps({'intent': 'restore_original'})
+                }
+
+            if detected_intent == 'transpose':
+                # Regex missed it — ask the classifier for the direction/amount too.
+                semitones = _classify_transpose_semitones(instruction, bedrock_client, BEDROCK_MODEL_ID)
+                if semitones is not None:
+                    transposed_xml = transpose_musicxml(current_xml, semitones)
+                    return {
+                        'statusCode': 200,
+                        'headers': headers,
+                        'body': json.dumps({'xmlContent': transposed_xml})
+                    }
+                # Fall through to full AI edit if we still can't parse it.
+
+            # detected_intent == 'fix' (or unknown) → full XML rewrite via Bedrock
             system_prompt = (
                 'You are a MusicXML editing assistant for guitar transcriptions. '
                 'The user will give you a MusicXML document and a change request. '

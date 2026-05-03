@@ -34,6 +34,36 @@ function sanitizeXml(raw: string): string {
   return xmlMatch ? xmlMatch[0].trim() : cleaned.trim();
 }
 
+/** Detect restore/revert intents so they never reach the API */
+function isRestoreIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  if (/\b(revert|undo|reset|restore)\b/.test(t)) return true;
+  if (
+    /\b(original|initial|first\s+version|as\s+it\s+was|as\s+before|unchanged|unmodified)\b/.test(
+      t,
+    )
+  )
+    return true;
+  if (
+    /\b(go|take|bring|put|get|send|give|show|return)\s+(?:me\s+|it\s+)?back\b/.test(
+      t,
+    )
+  )
+    return true;
+  if (/\bstart\s+(over|again|fresh)\b/.test(t)) return true;
+  if (/\b(the\s+way|like|what|how)\s+it\s+was\b/.test(t)) return true;
+  if (
+    /\b(remove|cancel|discard|drop|clear)\s+(?:all\s+)?(?:my\s+)?changes\b/.test(
+      t,
+    )
+  )
+    return true;
+  if (/\bfirst\s+(generat|transcrib|creat|produc)\b/.test(t)) return true;
+  if (/\bbefore\s+(?:the\s+)?(transpose|transpos|change|edit|modif)\b/.test(t))
+    return true;
+  return false;
+}
+
 const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   role: "assistant",
@@ -66,6 +96,7 @@ export const ChatInterface: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentAssistantMsgId = useRef<string | null>(null);
   const latestXmlRef = useRef<string | null>(null);
+  const originalXmlRef = useRef<string | null>(null);
 
   // userId
   const userId = useMemo(() => {
@@ -111,6 +142,7 @@ export const ChatInterface: React.FC = () => {
         const res = await fetch(url);
         const xml = sanitizeXml(await res.text());
         latestXmlRef.current = xml;
+        originalXmlRef.current ??= xml;
         updateAssistantMessage({
           content:
             "Here's your guitar transcription! You can play it back, zoom, and switch layouts.",
@@ -424,6 +456,21 @@ export const ChatInterface: React.FC = () => {
         });
 
         const data = await res.json();
+
+        // Backend may signal restore_original when the AI classifier identified
+        // the intent but the actual XML swap must happen client-side.
+        if (data.intent === "restore_original" && originalXmlRef.current) {
+          latestXmlRef.current = originalXmlRef.current;
+          updateAssistantMessage({
+            content: "Restored the original transcription.",
+            status: "complete",
+            progress: 100,
+            xmlContent: originalXmlRef.current,
+          });
+          setIsProcessing(false);
+          return;
+        }
+
         const fixedXml = sanitizeXml(data.xmlContent);
 
         // Update the latest XML reference
@@ -482,8 +529,29 @@ export const ChatInterface: React.FC = () => {
         // YouTube link flow
         void handleYouTubeTranscription(text);
       } else if (latestXmlRef.current) {
-        // There's a previous transcription — use AI to fix/edit it
-        void handleAiFix(text);
+        // Restore intent: swap XML client-side, never call the API
+        const restoreMatch = isRestoreIntent(text);
+        if (restoreMatch) {
+          if (originalXmlRef.current) {
+            latestXmlRef.current = originalXmlRef.current;
+            updateAssistantMessage({
+              content: "Restored the original transcription.",
+              status: "complete",
+              progress: 100,
+              xmlContent: originalXmlRef.current,
+            });
+          } else {
+            updateAssistantMessage({
+              content:
+                "I don't have the original transcription stored for this session. Please generate a new transcription.",
+              status: "complete",
+            });
+          }
+          setIsProcessing(false);
+        } else {
+          // There's a previous transcription — use AI to fix/edit it
+          void handleAiFix(text);
+        }
       } else {
         // Text-only message
         updateAssistantMessage({
