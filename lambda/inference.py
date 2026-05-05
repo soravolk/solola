@@ -355,7 +355,7 @@ def predict_notes(audio_file_path: str, model_path: str, tempo: float, output_di
     tempos = torch.full((len(cqt_segments),), float(tempo), dtype=torch.float32)
 
     with torch.no_grad():
-        _, tr_preds_tokens = model.model_inference(batch, cqt_lens, tempos)
+        tr_preds_tokens, _ = model.model_inference(batch, cqt_lens, tempos)
 
     segment_tabs = []
     for i in range(len(cqt_segments)):
