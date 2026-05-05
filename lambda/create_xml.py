@@ -24,16 +24,21 @@ def preprocess_input(notes):
     processed_notes = []
     current_bar = 0
     bar_length = 48
-    
+    prev_adjusted_end = 0
+
     for i, note in enumerate(notes):
         start, duration, pitch, string, fret, technique = note
-        
-        # If the start position is 0 and it's not the first note, it indicates a new bar
-        if start == 0 and processed_notes and notes[i-1][1] != 1:
-            current_bar += 1
-        
+
         # Adjust the start position
         adjusted_start = start + (current_bar * bar_length)
+
+        # Advance current_bar if adjusted start falls before the previous note's end.
+        # This handles segment boundaries where raw positions reset to small values
+        # rather than 0, which the old start==0 check could not detect.
+        if i > 0 and adjusted_start < prev_adjusted_end:
+            while start + current_bar * bar_length < prev_adjusted_end:
+                current_bar += 1
+            adjusted_start = start + (current_bar * bar_length)
 
         if duration == 1:
             prev_dur_ok = i == 0 or notes[i - 1][1] != 1
@@ -42,9 +47,12 @@ def preprocess_input(notes):
                 duration = 0
                 notes[i + 1][1] += 1
                 notes[i + 1][0] -= 1
-        
+
+        if duration != 0:
+            prev_adjusted_end = adjusted_start + duration
+
         processed_notes.append([adjusted_start, duration, pitch, string, fret, technique])
-    
+
     return processed_notes
 
 def preprocess_gt(notes):
