@@ -326,12 +326,12 @@ def create_musicxml(notes):
     
     # Standard guitar tuning (from string 1 to 6: E3, A3, D4, G4, B4, E5)
     tuning_pitches = [
-        ('E', 3),  # String 1 (low E)
-        ('A', 3),  # String 2
-        ('D', 4),  # String 3
-        ('G', 4),  # String 4
-        ('B', 4),  # String 5
-        ('E', 5),  # String 6 (high E)
+        ('E', 2),  # String 1 (low E)
+        ('A', 2),  # String 2
+        ('D', 3),  # String 3
+        ('G', 3),  # String 4
+        ('B', 3),  # String 5
+        ('E', 4),  # String 6 (high E)
     ]
     for string_num, (step, octave) in enumerate(tuning_pitches, 1):
         staff_tuning = ET.SubElement(staff_details, 'staff-tuning', line=str(string_num))
