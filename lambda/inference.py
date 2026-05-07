@@ -355,22 +355,32 @@ def predict_notes(audio_file_path: str, model_path: str, tempo: float, output_di
     tempos = torch.full((len(cqt_segments),), float(tempo), dtype=torch.float32)
 
     with torch.no_grad():
-        tr_preds_tokens, _ = model.model_inference(batch, cqt_lens, tempos)
+        ctc_preds_tokens, _ = model.model_inference(batch, cqt_lens, tempos)
 
     segment_tabs = []
     for i in range(len(cqt_segments)):
-        tab = model.tokenizer.tokens_to_tab([tr_preds_tokens[i]])
+        tab = model.tokenizer.tokens_to_tab([ctc_preds_tokens[i]])
         tab = [[int(element) for element in row] for row in tab]
         segment_tabs.append(tab)
-        # Save per-segment prediction
+        # Save per-segment prediction (.npy)
         seg_pred_path = os.path.join(model.prediction_dir, f"{track_name}_note_prediction_segment_{i:02d}.npy")
         np.save(seg_pred_path, np.array(tab, dtype=int))
+        # Save per-segment prediction (.tsv)
+        seg_tsv_path = os.path.join(model.prediction_dir, f"{track_name}_note_prediction_segment_{i:02d}.tsv")
+        with open(seg_tsv_path, 'w') as tsv_f:
+            for row in tab:
+                tsv_f.write(f"{row}\n")
 
     concatenated = [row for seg in segment_tabs for row in seg]
 
     os.makedirs(model.prediction_dir, exist_ok=True)
     prediction_path = os.path.join(model.prediction_dir, "note_prediction.npy")
     np.save(prediction_path, np.array(concatenated, dtype=int))
+    # Save concatenated note prediction (.tsv)
+    concat_tsv_path = os.path.join(model.prediction_dir, "note_prediction.tsv")
+    with open(concat_tsv_path, 'w') as tsv_f:
+        for row in concatenated:
+            tsv_f.write(f"{row}\n")
 
     # Save simple manifest for downstream usage
     try:
