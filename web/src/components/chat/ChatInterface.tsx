@@ -576,7 +576,10 @@ export const ChatInterface: React.FC = () => {
             <Guitar size={22} />
           </div>
           <div>
-            <h1 className="chat-header-title">Solola</h1>
+            <h1 className="chat-header-title">
+              Solola
+              <span className="chat-header-beta">Beta</span>
+            </h1>
             <span className="chat-header-subtitle">
               AI Guitar Transcription
             </span>

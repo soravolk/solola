@@ -59,6 +59,23 @@
   letter-spacing: 0.03em;
 }
 
+.chat-header-beta {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: rgba(138, 127, 255, 0.2);
+  border: 1px solid rgba(138, 127, 255, 0.45);
+  color: #b0abf5;
+  -webkit-text-fill-color: #b0abf5;
+  vertical-align: middle;
+  line-height: 1.5;
+}
+
 .chat-header-right {
   display: flex;
   align-items: center;
