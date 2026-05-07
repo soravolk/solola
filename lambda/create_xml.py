@@ -124,6 +124,17 @@ def process_tied_notes(notes):
                 # Small gap from model prediction rounding — snap start to previous end
                 duration += gap
                 start = previous_end
+            elif gap > 2:
+                # Larger gap — fill with a rest note to keep the timeline continuous
+                rest_gap = gap
+                rest_start = previous_end
+                while rest_gap > 0:
+                    # Split rest across bar boundaries if needed
+                    bar_end = (rest_start // bar_length + 1) * bar_length
+                    chunk = min(rest_gap, bar_end - rest_start)
+                    result.append([rest_start, chunk, 100, 0, -1, 1, False])
+                    rest_start += chunk
+                    rest_gap -= chunk
             else:
                 raise NoteAlignmentError(f"Note misalignment: previous note ended at {previous_end}, but current note starts at {start}")
 
