@@ -16,6 +16,7 @@ dist-ssr
 
 # server
 __pycache__
+.env
 
 # Editor directories and files
 .vscode/*
@@ -27,3 +28,23 @@ __pycache__
 *.njsproj
 *.sln
 *.sw?
+
+# lambda
+cqt
+prediction
+frame_level_full_tech_prediction
+frame_level_note_attrib
+frame_level_pred
+full_tech_prediction
+*.ckpt
+*.mp3
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+.tfvars
+terraform.tfvars
+!terraform.tfvars.example
+.env.local
