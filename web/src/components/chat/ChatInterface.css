@@ -210,6 +210,33 @@
   transform: translateY(-2px);
 }
 
+.chat-suggestion-card--coming-soon {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-suggestion-card--coming-soon:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.06);
+  transform: none;
+}
+
+.chat-suggestion-coming-soon {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 5px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: rgba(255, 165, 0, 0.15);
+  border: 1px solid rgba(255, 165, 0, 0.35);
+  color: #ffa94d;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+
 .chat-suggestion-icon {
   color: #8b9cf7;
   flex-shrink: 0;

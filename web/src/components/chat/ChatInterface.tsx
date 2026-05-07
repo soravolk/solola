@@ -82,6 +82,7 @@ const SUGGESTION_CARDS = [
     icon: Link,
     title: "YouTube Link",
     description: "Paste a link to transcribe",
+    comingSoon: true,
   },
   {
     icon: Sparkles,
@@ -612,10 +613,20 @@ export const ChatInterface: React.FC = () => {
               </p>
               <div className="chat-suggestion-cards">
                 {SUGGESTION_CARDS.map((card) => (
-                  <div key={card.title} className="chat-suggestion-card">
+                  <div
+                    key={card.title}
+                    className={`chat-suggestion-card${
+                      card.comingSoon ? " chat-suggestion-card--coming-soon" : ""
+                    }`}
+                  >
                     <card.icon size={20} className="chat-suggestion-icon" />
-                    <div>
-                      <div className="chat-suggestion-title">{card.title}</div>
+                    <div style={{ flex: 1 }}>
+                      <div className="chat-suggestion-title">
+                        {card.title}
+                        {card.comingSoon && (
+                          <span className="chat-suggestion-coming-soon">Coming Soon</span>
+                        )}
+                      </div>
                       <div className="chat-suggestion-desc">
                         {card.description}
                       </div>
