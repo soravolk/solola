@@ -3,6 +3,7 @@ import { Guitar } from "lucide-react";
 import type { ChatMessage } from "../../types/chat";
 import { ChatMessageBubble } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
+import { HowItWorks } from "./HowItWorks";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import "./ChatInterface.css";
 
@@ -452,6 +453,7 @@ export const ChatInterface: React.FC = () => {
                 AI turns an electric guitar solo into editable notation &amp;
                 tab.
               </p>
+              <HowItWorks />
             </div>
           )}
 
