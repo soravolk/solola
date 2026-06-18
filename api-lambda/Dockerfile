@@ -4,8 +4,8 @@ FROM public.ecr.aws/lambda/python:3.11
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy handler code
-COPY handler.py ${LAMBDA_TASK_ROOT}/
+# Copy handler + edit-pipeline modules (tests/ and *-dev files are NOT copied)
+COPY *.py ${LAMBDA_TASK_ROOT}/
 
 # Set the handler
 CMD ["handler.lambda_handler"]
