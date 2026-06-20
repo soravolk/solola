@@ -40,6 +40,13 @@ resource "aws_apigatewayv2_route" "generate_post" {
   target    = "integrations/${aws_apigatewayv2_integration.api_lambda.id}"
 }
 
+# Route: POST /api/v1/fix (AI-powered MusicXML correction)
+resource "aws_apigatewayv2_route" "fix_post" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /api/v1/fix"
+  target    = "integrations/${aws_apigatewayv2_integration.api_lambda.id}"
+}
+
 # Route: GET / (health check)
 resource "aws_apigatewayv2_route" "root_get" {
   api_id    = aws_apigatewayv2_api.api.id

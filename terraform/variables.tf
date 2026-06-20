@@ -71,6 +71,24 @@ variable "cors_origins" {
   default     = ["https://solola.net", "https://www.solola.net", "http://localhost:5173"]
 }
 
+variable "bedrock_model_id" {
+  description = "Bedrock model ID for AI-powered MusicXML correction"
+  type        = string
+  default     = "openai.gpt-oss-20b-1:0"
+}
+
+variable "max_fix_requests_per_hour" {
+  description = "Maximum AI fix requests per user per hour"
+  type        = string
+  default     = "20"
+}
+
+variable "max_fix_requests_per_day" {
+  description = "Maximum AI fix requests per user per day"
+  type        = string
+  default     = "100"
+}
+
 variable "subnet_ids" {
   description = "VPC subnet IDs for Lambda (optional for VPC mode)"
   type        = list(string)

@@ -2,16 +2,94 @@ import json
 import os
 import uuid
 import boto3
+from botocore.config import Config
+from datetime import datetime, timedelta
+from transpose import parse_transpose_semitones, transpose_musicxml
+from edit_router import run_router
+from edit_executor import edit_with_repair
+from edit_response import build_response
+from musicxml_validate import count_notes
 
 # Initialize AWS clients outside handler for connection reuse
 s3_client = boto3.client('s3')
 lambda_client = boto3.client('lambda')
+# Cap each Bedrock call below the API Gateway ~30s timeout so a slow Editor
+# rewrite aborts in time for a graceful reply instead of a raw 503.
+_bedrock_cfg = Config(connect_timeout=5, read_timeout=25,
+                      retries={'max_attempts': 1, 'mode': 'standard'})
+bedrock_client = boto3.client('bedrock-runtime',
+                              region_name=os.environ.get('AWS_REGION', 'us-east-1'),
+                              config=_bedrock_cfg)
+dynamodb = boto3.resource('dynamodb')
+rate_limit_table = dynamodb.Table(os.environ.get('RATE_LIMIT_TABLE', 'solola-rate-limit'))
 
 BUCKET_NAME = os.environ.get('S3_BUCKET_NAME', 'solola-bucket')
 INFERENCE_LAMBDA_ARN = os.environ.get('INFERENCE_LAMBDA_ARN', '')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'openai.gpt-oss-20b-1:0')
+
+# Rate limit config
+MAX_FIX_REQUESTS_PER_HOUR = int(os.environ.get('MAX_FIX_REQUESTS_PER_HOUR', '20'))
+MAX_FIX_REQUESTS_PER_DAY = int(os.environ.get('MAX_FIX_REQUESTS_PER_DAY', '100'))
 
 
 # ---------------------------------------------------------------------------
+
+def check_rate_limit(identifier: str) -> dict:
+    """Check if IP/user has exceeded rate limits. Returns {'allowed': bool, 'error': str}"""
+    now = datetime.utcnow()
+    hour_key = now.strftime('%Y%m%d%H')
+    day_key = now.strftime('%Y%m%d')
+    
+    try:
+        response = rate_limit_table.get_item(Key={'user_id': identifier})
+        
+        if 'Item' not in response:
+            # First request from this identifier
+            rate_limit_table.put_item(Item={
+                'user_id': identifier,
+                'hourly': {hour_key: 1},
+                'daily': {day_key: 1},
+                'expires_at': int((now + timedelta(days=2)).timestamp())
+            })
+            return {'allowed': True}
+        
+        item = response['Item']
+        hourly = item.get('hourly', {})
+        daily = item.get('daily', {})
+        
+        hourly_count = hourly.get(hour_key, 0)
+        daily_count = daily.get(day_key, 0)
+        
+        # Check limits
+        if hourly_count >= MAX_FIX_REQUESTS_PER_HOUR:
+            return {
+                'allowed': False,
+                'error': f'Rate limit exceeded: {MAX_FIX_REQUESTS_PER_HOUR} requests per hour. Please try again later.'
+            }
+        
+        if daily_count >= MAX_FIX_REQUESTS_PER_DAY:
+            return {
+                'allowed': False,
+                'error': f'Rate limit exceeded: {MAX_FIX_REQUESTS_PER_DAY} requests per day. Please try again tomorrow.'
+            }
+        
+        # Update counts
+        hourly[hour_key] = hourly_count + 1
+        daily[day_key] = daily_count + 1
+        
+        rate_limit_table.put_item(Item={
+            'user_id': identifier,
+            'hourly': hourly,
+            'daily': daily,
+            'expires_at': int((now + timedelta(days=2)).timestamp())
+        })
+        
+        return {'allowed': True}
+        
+    except Exception as e:
+        print(f"Rate limit check error: {e}")
+        # Fail open - allow request if rate limit check fails
+        return {'allowed': True}
 
 def generate_presigned_url(file_name: str, file_type: str) -> str:
     """Generate presigned URL for S3 upload"""
@@ -272,6 +350,115 @@ def lambda_handler(event, context):
                 'body': json.dumps({"error": f"Internal server error: {str(e)}"})
             }
     
+    # Route: POST /api/v1/fix - conversational Router -> Edit pipeline
+    if http_method == 'POST' and request_path == '/api/v1/fix':
+        print(">>> Matched /api/v1/fix route")
+        try:
+            body = json.loads(event.get('body', '{}'))
+            current_xml = body.get('currentXml', '')
+            instruction = body.get('instruction', '')
+            history = body.get('history', []) or []
+
+            source_ip = event.get('requestContext', {}).get('http', {}).get('sourceIp', 'unknown')
+
+            if not instruction:
+                return {'statusCode': 400, 'headers': headers,
+                        'body': json.dumps({'error': 'Missing instruction'})}
+
+            rate_check = check_rate_limit(source_ip)
+            if not rate_check['allowed']:
+                return {'statusCode': 429, 'headers': headers,
+                        'body': json.dumps({'error': rate_check['error']})}
+
+            MAX_XML_SIZE = 500_000
+            MAX_INSTRUCTION_SIZE = 1000
+            if len(current_xml) > MAX_XML_SIZE:
+                return {'statusCode': 413, 'headers': headers,
+                        'body': json.dumps({'error': f'XML too large (max {MAX_XML_SIZE} bytes)'})}
+            if len(instruction) > MAX_INSTRUCTION_SIZE:
+                return {'statusCode': 413, 'headers': headers,
+                        'body': json.dumps({'error': f'Instruction too long (max {MAX_INSTRUCTION_SIZE} chars)'})}
+
+            has_transcription = bool(current_xml)
+            original_note_count = count_notes(current_xml)
+
+            # --- Fast path: deterministic transpose (no LLM, never times out) ---
+            # Runs BEFORE the Router so obvious transposes bypass the slow Editor
+            # rewrite entirely and cannot hit the API Gateway ~30s timeout.
+            if has_transcription:
+                fast_semitones = parse_transpose_semitones(instruction)
+                if fast_semitones is not None:
+                    transposed = transpose_musicxml(current_xml, fast_semitones)
+                    direction = 'up' if fast_semitones > 0 else 'down'
+                    return {'statusCode': 200, 'headers': headers,
+                            'body': json.dumps(build_response('transpose',
+                                f"Transposed {direction} {abs(fast_semitones)} semitone(s).",
+                                xml_content=transposed))}
+
+            # --- Router (no XML; cheap) ---
+            routed = run_router(bedrock_client, BEDROCK_MODEL_ID, history,
+                                instruction, has_transcription)
+            intent = routed['intent']
+            reply = routed['reply']
+            print(f"Router intent={intent} ip={source_ip} instr={instruction[:80]!r}")
+
+            # --- clarify / reject: reply only, no XML ---
+            if intent in ('clarify', 'reject'):
+                if not reply:
+                    reply = ("Could you be more specific about which note or change you want?"
+                             if intent == 'clarify'
+                             else "I can change notes, rhythm, articulations, transpose, or restore the original - but not that.")
+                return {'statusCode': 200, 'headers': headers,
+                        'body': json.dumps(build_response(intent, reply))}
+
+            # --- restore: signal client-side swap ---
+            if intent == 'restore':
+                return {'statusCode': 200, 'headers': headers,
+                        'body': json.dumps(build_response('restore', reply or "Restored the original transcription."))}
+
+            # Everything below needs a current transcription.
+            if not has_transcription:
+                return {'statusCode': 200, 'headers': headers,
+                        'body': json.dumps(build_response('reject',
+                            "Please generate a transcription first, then I can edit it."))}
+
+            # --- transpose: deterministic ---
+            if intent == 'transpose':
+                semitones = routed['semitones']
+                if semitones is None:
+                    semitones = parse_transpose_semitones(instruction)
+                if semitones is None:
+                    return {'statusCode': 200, 'headers': headers,
+                            'body': json.dumps(build_response('clarify',
+                                "How many semitones should I transpose, and up or down?"))}
+                transposed = transpose_musicxml(current_xml, semitones)
+                direction = 'up' if semitones > 0 else 'down'
+                msg = reply or f"Transposed {direction} {abs(semitones)} semitone(s)."
+                return {'statusCode': 200, 'headers': headers,
+                        'body': json.dumps(build_response('transpose', msg, xml_content=transposed))}
+
+            # --- edit: Editor + validate/repair (wall-clock budgeted in executor) ---
+            ok, fixed_xml, err = edit_with_repair(
+                bedrock_client, BEDROCK_MODEL_ID, current_xml, instruction,
+                original_note_count)
+            if ok:
+                msg = reply or "Done - updated the transcription."
+                return {'statusCode': 200, 'headers': headers,
+                        'body': json.dumps(build_response('edit', msg, xml_content=fixed_xml))}
+            print(f"Edit failed: {err}")
+            if err and 'timed out' in err.lower():
+                fail_msg = ("That edit took too long to apply on a transcription this "
+                            "size. Try a smaller, more specific change - transposing is instant.")
+            else:
+                fail_msg = "I couldn't apply that cleanly - try rephrasing or being more specific."
+            return {'statusCode': 200, 'headers': headers,
+                    'body': json.dumps(build_response('reject', fail_msg))}
+
+        except Exception as e:
+            print(f"Error in /api/v1/fix: {str(e)}")
+            return {'statusCode': 500, 'headers': headers,
+                    'body': json.dumps({'error': f'Edit failed: {str(e)}'})}
+
     # No route matched - return 404
     return {
         'statusCode': 404,
