@@ -35,6 +35,36 @@ function sanitizeXml(raw: string): string {
   return xmlMatch ? xmlMatch[0].trim() : cleaned.trim();
 }
 
+/** Detect restore/revert intents so they never reach the API */
+function isRestoreIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  if (/\b(revert|undo|reset|restore)\b/.test(t)) return true;
+  if (
+    /\b(original|initial|first\s+version|as\s+it\s+was|as\s+before|unchanged|unmodified)\b/.test(
+      t,
+    )
+  )
+    return true;
+  if (
+    /\b(go|take|bring|put|get|send|give|show|return)\s+(?:me\s+|it\s+)?back\b/.test(
+      t,
+    )
+  )
+    return true;
+  if (/\bstart\s+(over|again|fresh)\b/.test(t)) return true;
+  if (/\b(the\s+way|like|what|how)\s+it\s+was\b/.test(t)) return true;
+  if (
+    /\b(remove|cancel|discard|drop|clear)\s+(?:all\s+)?(?:my\s+)?changes\b/.test(
+      t,
+    )
+  )
+    return true;
+  if (/\bfirst\s+(generat|transcrib|creat|produc)\b/.test(t)) return true;
+  if (/\bbefore\s+(?:the\s+)?(transpose|transpos|change|edit|modif)\b/.test(t))
+    return true;
+  return false;
+}
+
 const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   role: "assistant",
@@ -49,6 +79,7 @@ export const ChatInterface: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentAssistantMsgId = useRef<string | null>(null);
   const latestXmlRef = useRef<string | null>(null);
+  const originalXmlRef = useRef<string | null>(null);
 
   // userId
   const userId = useMemo(() => {
@@ -94,6 +125,7 @@ export const ChatInterface: React.FC = () => {
         const res = await fetch(url);
         const xml = sanitizeXml(await res.text());
         latestXmlRef.current = xml;
+        originalXmlRef.current ??= xml;
         updateAssistantMessage({
           content:
             "Here's your guitar transcription! You can play it back, zoom, and switch layouts.",
@@ -364,6 +396,134 @@ export const ChatInterface: React.FC = () => {
     [userId, updateAssistantMessage],
   );
 
+  // Conversational edit via Router->Edit pipeline
+  const handleAiFix = useCallback(
+    async (instruction: string) => {
+      if (!latestXmlRef.current) return;
+
+      try {
+        updateAssistantMessage({
+          status: "processing",
+          progress: 30,
+          statusText: "Thinking…",
+        });
+
+        const fixUrl =
+          import.meta.env.VITE_FIX_API_URL ||
+          "https://kc3itnsdm0.execute-api.us-east-1.amazonaws.com/api/v1/fix";
+
+        // Last ~6 prior messages as plain text (no XML) for multi-turn context.
+        const history = messages
+          .slice(-6)
+          .map((m) => ({ role: m.role, content: m.content }))
+          .filter((m) => m.content);
+
+        const res = await fetch(fixUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentXml: latestXmlRef.current,
+            instruction,
+            history,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          if (res.status === 429) {
+            // Rate limit: surface the server's specific message (e.g. the
+            // per-hour/day edit cap) rather than a generic "busy" string.
+            throw new Error(
+              errData.error ||
+                "You've reached the edit limit for now. Please try again later.",
+            );
+          }
+          if (res.status === 503) {
+            throw new Error(
+              "The AI service is temporarily busy. Please try again in a moment.",
+            );
+          }
+          throw new Error(errData.error || `Request failed: ${res.status}`);
+        }
+
+        const data = await res.json();
+        const action: string = data.action;
+        const reply: string =
+          data.reply || "Updated the transcription.";
+
+        // restore: swap to the stored original client-side
+        if (action === "restore") {
+          if (originalXmlRef.current) {
+            latestXmlRef.current = originalXmlRef.current;
+            updateAssistantMessage({
+              content: reply,
+              status: "complete",
+              progress: 100,
+              xmlContent: originalXmlRef.current,
+            });
+          } else {
+            updateAssistantMessage({
+              content:
+                "I don't have the original transcription stored for this session.",
+              status: "complete",
+              progress: 100,
+            });
+          }
+          setIsProcessing(false);
+          return;
+        }
+
+        // clarify / reject: conversational reply only, no score change
+        if (action === "clarify" || action === "reject") {
+          updateAssistantMessage({
+            content: reply,
+            status: "complete",
+            progress: 100,
+          });
+          setIsProcessing(false);
+          return;
+        }
+
+        // edit / transpose: apply the new score
+        if (action === "edit" || action === "transpose") {
+          if (data.xmlContent) {
+            const fixedXml = sanitizeXml(data.xmlContent);
+            latestXmlRef.current = fixedXml;
+            updateAssistantMessage({
+              content: reply,
+              status: "complete",
+              progress: 100,
+              xmlContent: fixedXml,
+            });
+          } else {
+            updateAssistantMessage({
+              content:
+                "The AI returned an incomplete result. Please try again.",
+              status: "error",
+              statusText: "No updated score returned.",
+            });
+          }
+        } else {
+          // Unknown action — show the reply without changing the score.
+          updateAssistantMessage({
+            content: reply,
+            status: "complete",
+            progress: 100,
+          });
+        }
+        setIsProcessing(false);
+      } catch (err: any) {
+        updateAssistantMessage({
+          content: "Sorry, the AI couldn't handle that request.",
+          status: "error",
+          statusText: err?.message || "Edit request failed.",
+        });
+        setIsProcessing(false);
+      }
+    },
+    [messages, updateAssistantMessage],
+  );
+
   // Handle user sending a message
   const handleSend = useCallback(
     (text: string, file?: File) => {
@@ -397,6 +557,30 @@ export const ChatInterface: React.FC = () => {
       } else if (text.includes("youtube.com") || text.includes("youtu.be")) {
         // YouTube link flow
         void handleYouTubeTranscription(text);
+      } else if (latestXmlRef.current) {
+        // Restore intent: swap XML client-side, never call the API
+        const restoreMatch = isRestoreIntent(text);
+        if (restoreMatch) {
+          if (originalXmlRef.current) {
+            latestXmlRef.current = originalXmlRef.current;
+            updateAssistantMessage({
+              content: "Restored the original transcription.",
+              status: "complete",
+              progress: 100,
+              xmlContent: originalXmlRef.current,
+            });
+          } else {
+            updateAssistantMessage({
+              content:
+                "I don't have the original transcription stored for this session. Please generate a new transcription.",
+              status: "complete",
+            });
+          }
+          setIsProcessing(false);
+        } else {
+          // There's a previous transcription — use AI to fix/edit it
+          void handleAiFix(text);
+        }
       } else {
         // Text-only message
         updateAssistantMessage({
@@ -407,7 +591,7 @@ export const ChatInterface: React.FC = () => {
         setIsProcessing(false);
       }
     },
-    [handleUploadAndGenerate, updateAssistantMessage],
+    [handleUploadAndGenerate, handleAiFix, updateAssistantMessage],
   );
 
   const hasUserMessages = messages.some((m) => m.role === "user");
@@ -489,6 +673,11 @@ export const ChatInterface: React.FC = () => {
         <p className="chat-disclaimer">
           🔗 YouTube import — coming soon · Beta · AI results may vary
         </p>
+        {hasUserMessages && latestXmlRef.current && (
+          <p className="chat-model-note">
+            Edits use a lightweight AI model — keep requests specific.
+          </p>
+        )}
       </div>
     </div>
   );
